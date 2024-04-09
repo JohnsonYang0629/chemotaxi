@@ -1,0 +1,30 @@
+# Select problem to solve
+scheme                                   mobility
+
+# Select implementation to compute the blobs mobility 
+# Options: python and boost
+mobility_blobs_implementation            python
+mobility_vector_prod_implementation      numba
+
+# Select implementation to compute the blobs-blob interactions
+blob_blob_force_implementation           numba
+
+solver_tolerance                         1.0e-3
+
+# Set fluid viscosity (eta) and blob radius
+eta                                      1.0
+g                                        0.0
+blob_radius                              0.05
+
+# Set interaction with the wall
+repulsion_strength_wall                  0.0
+debye_length_wall                        0.5
+
+# Plot velocity field
+#plot_velocity_field                     -5 5 128 -5 5 128 0 10 128
+
+# Set output name
+output_name                              eps_60_h_1d20_c2s_flow
+
+# Load rigid bodies configuration
+structure	../../Structures/shell_N_218_Rg_1_s_0.2095_cube2sphere.vertex  squirmer.clones  ../../Slips/dipole_N_1_S_50_at_shell_N_218_Rg_1_cube2sphere.slip

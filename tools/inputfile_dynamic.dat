@@ -1,0 +1,47 @@
+# Select integrator 
+scheme                                   stochastic_Slip_Trapz
+
+# Select implementation to compute M and M*f
+mobility_blobs_implementation            python_no_wall
+mobility_vector_prod_implementation      numba_no_wall
+
+# Select implementation to compute the blobs-blob interactions
+body_body_force_torque_implementation     python
+
+# Set time step, number of steps and save frequency
+dt                                       0.5
+n_steps                                  20000
+n_save                                   1
+initial_step				             0
+
+# Set fluid viscosity (eta), gravity (g) and blob radius
+eta                                      1.0
+g                                        0.0
+blob_radius                              0.05
+
+# Set parameters for the blob-blob interaction
+repulsion_strength                       0.0
+debye_length                             1.0
+
+# Set interaction with the wall
+repulsion_strength_wall                  0.0
+debye_length_wall                        1.0
+
+# Brownian motion
+kT                                       0.000041419464
+
+
+# Set output name
+# This test is aimed to find the alignment phase diagram
+output_name                              test
+save_clones				                 one_file
+fix_pos                                  False
+fix_height                               False
+save_velocities                          True
+lambda_spring                            10
+initial_cg                               0 0 1.5
+
+# Load rigid bodies configuration, provide
+# *.vertex and *.clones files
+structure   ../../Structures/shell_N_218_Rg_1_s_0.2095_cube2sphere.vertex  rotor1.clones  ../../Slips/dipole_N_1_S_50_at_shell_N_218_Rg_1_cube2sphere.slip
+structure   ../../Structures/shell_N_218_Rg_1_s_0.2095_cube2sphere.vertex  rotor_frame.clones  ../../Slips/dipole_N_1_S_50_at_shell_N_218_Rg_1_cube2sphere.slip

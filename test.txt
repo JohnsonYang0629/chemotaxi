@@ -1,0 +1,28 @@
+# describe job
+job_name                    test_2d
+job_type                    dynamic
+domain                      4D
+scheme                      history_local_compose_2d
+
+# parameters specification
+mobility_alpha              1
+radius                      1
+intrinsic_linear_velocity   1
+intrinsic_angular_velocity  1
+emission_rate               1
+persistence_length          1
+
+peclet_number               1
+
+initial_position            0 0
+initial_orientation         0
+
+# numerical simulation configuration
+droplet_num                 1
+n_steps                     10
+dt                          0.01
+
+# Set output name
+output_name                 test_2d
+save_clones				    one_file
+initial_step                0
