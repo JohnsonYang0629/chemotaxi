@@ -74,7 +74,7 @@ if __name__ == '__main__':
         open(output_file_name, 'w', buffering=buffering)
         velocity_file_name = output_name + '.velocity.dat'
         open(velocity_file_name, 'w', buffering=buffering)
-        chem_force_file_name = output_name + '.chemforc.dat'
+        chem_force_file_name = output_name + '.chemforce.dat'
         open(chem_force_file_name, 'w', buffering=buffering)
 
     for step in range(read.initial_step, n_steps):
