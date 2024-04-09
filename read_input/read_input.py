@@ -54,6 +54,7 @@ class ReadInput(object):
     self.initial_position = np.fromstring(self.options.get('initial_position') or '0 0', sep=' ')
     self.initial_orientation = np.fromstring(self.options.get('initial_orientation') or '0 0 0 0', sep=' ')
 
+    self.surface_disc_num = int(self.options.get('surface_disc_num') or 2)
     self.dt = float(self.options.get('dt') or 0.0)
     self.n_steps = int(self.options.get('n_steps') or 1)
     self.n_save = int(self.options.get('n_save') or 1)
@@ -65,5 +66,6 @@ class ReadInput(object):
 
     self.output_name = str(self.options.get('output_name') or 'run')
     self.save_clones = str(self.options.get('save_clones') or 'one_file')
+    self.structure = str.split(str(self.options.get('structure0')))
 
     return

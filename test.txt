@@ -1,11 +1,11 @@
-# describe job
+# Job description
 job_name                    test_2d
 job_type                    dynamic
-domain                      4D
+domain                      2D
 scheme                      history_local_compose_2d
 
-# parameters specification
-mobility_alpha              1
+# Parameters specification
+mobility_alpha              0
 radius                      1
 intrinsic_linear_velocity   1
 intrinsic_angular_velocity  1
@@ -15,14 +15,17 @@ persistence_length          1
 peclet_number               1
 
 initial_position            0 0
-initial_orientation         0
+initial_orientation         1 0
 
-# numerical simulation configuration
+# Numerical simulation configuration
 droplet_num                 1
 n_steps                     10
 dt                          0.01
 
-# Set output name
+# Output configuration
 output_name                 test_2d
 save_clones				    one_file
 initial_step                0
+
+# Discretization info
+structure                   unit_circle_N6.vertex

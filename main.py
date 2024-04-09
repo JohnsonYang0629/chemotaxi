@@ -1,14 +1,20 @@
 import argparse
+import sys
+
 import numpy as np
 from shutil import copyfile
+from functools import partial
 import time
 
 # Find project functions
 from read_input import read_input
+from read_input import read_vertex_file
 from body import body_2D
 from body import body_3D
 from integrator.integrator_2D import ChemoIntegrator2D
 from integrator.integrator_3D import ChemoIntegrator3D
+import chem_functions
+
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
@@ -36,18 +42,29 @@ if __name__ == '__main__':
     output_name = read.output_name
     copyfile(input_file, output_name + '.inputfile')
 
+    structure_file_name = read.structure
+    structure_ref_config = read_vertex_file.read_vertex_file(structure_file_name[0])
+
     # Create droplet body
     if domain == '2D':
-        body = body_2D.Body_2D(initial_struct_location, initial_struct_orientations)
+        body = body_2D.Body2D(initial_struct_location, initial_struct_orientations, n_steps)
+        body.location_history[0, :] = initial_struct_location
         integrator = ChemoIntegrator2D(body, scheme, domain)
     elif domain == '3D':
-        body = body_3D.Body_3D(initial_struct_location, initial_struct_orientations)
+        body = body_3D.Body3D(initial_struct_location, initial_struct_orientations, n_steps)
+        body.location_history[0, :] = initial_struct_location
         integrator = ChemoIntegrator3D(body, scheme, domain)
     else:
         print('Domain should use \"2D\" or \"3D\". \n')
         exit()
 
-
+    integrator.peclet_number = read.peclet_number
+    integrator.mobility_alpha = read.mobility_alpha
+    integrator.intrinsic_velocity = intrinsic_velocity
+    integrator.rotation_matrix_2d = chem_functions.rotation_matrix_2d
+    integrator.calc_surface_gradient_circle = partial(chem_functions.calc_surface_gradient_circle,
+                                                      peclet_number=read.peclet_number,
+                                                      structure_ref_config=structure_ref_config)
 
     # Loop over time steps
     start_time = time.time()
@@ -57,7 +74,7 @@ if __name__ == '__main__':
         open(output_file_name, 'w', buffering=buffering)
         velocity_file_name = output_name + '.velocity.dat'
         open(velocity_file_name, 'w', buffering=buffering)
-        chem_force_file_name = output_name + '.chemforce.dat'
+        chem_force_file_name = output_name + '.chemforc.dat'
         open(chem_force_file_name, 'w', buffering=buffering)
 
     for step in range(read.initial_step, n_steps):
@@ -66,8 +83,11 @@ if __name__ == '__main__':
             elapsed_time = time.time() - start_time
             print('Step = ', step, ', wallclock time = ', time.time() - start_time)
 
-
         integrator.advance_time_step(dt, step=step)
 
-        # Save final data if...
-        if ((step + 1) % n_save) == 0 and step >= 0:
+    # Save final data if...
+    if ((step + 1) % n_save) == 0 and step >= 0:
+        elapsed_time = time.time() - start_time
+        print('Step = ', step + 1)
+        print(body.location_history)
+

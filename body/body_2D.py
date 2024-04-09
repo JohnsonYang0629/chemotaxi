@@ -2,11 +2,12 @@ import numpy as np
 import copy
 import sys
 
-class Body_2D(object):
+
+class Body2D(object):
   '''
   Small class to handle a single body in 2D domain.
   '''
-  def __init__(self, location, orientation):
+  def __init__(self, location, orientation, n_steps):
     '''
     Constructor. Take arguments like ...
     '''
@@ -14,10 +15,11 @@ class Body_2D(object):
     self.location = np.copy(location)
     self.location_new = np.copy(location)
     self.location_old = np.copy(location)
+    self.location_history = np.zeros([n_steps + 1, 2])
     # Orientation as Quaternion
-    self.orientation = copy.copy(orientation)
-    self.orientation_new = copy.copy(orientation)
-    self.orientation_old = copy.copy(orientation)
+    self.orientation = np.copy(orientation)
+    self.orientation_new = np.copy(orientation)
+    self.orientation_old = np.copy(orientation)
     # Reference configuration. Coordinates of droplet for polar coordinate theta [0]
     # and location = np.array[0, 0]) as a np.array.shape = (1, 2)
     # self.rotation_matrix = None
