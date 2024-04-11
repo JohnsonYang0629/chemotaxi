@@ -59,7 +59,7 @@ class ChemoIntegrator2D(object):
             else:
                 # Use forward Euler method
                 chem_force = self.calc_surface_gradient_circle(self.body, *args, **kwargs)
-                chem_prop = self.mobility_alpha * chem_force
+                chem_prop = self.mobility_alpha/(2 * np.pi) * chem_force
                 angular_velocity = self.intrinsic_velocity[1]  # noise required
                 angular_velocity_dt = angular_velocity * dt
                 orientation_new = np.dot(self.rotation_matrix_2d(angular_velocity_dt), body.orientation)
