@@ -64,30 +64,63 @@ if __name__ == '__main__':
     integrator.rotation_matrix_2d = chem_functions.rotation_matrix_2d
     integrator.calc_surface_gradient_circle = partial(chem_functions.calc_surface_gradient_circle,
                                                       peclet_number=read.peclet_number,
-                                                      structure_ref_config=structure_ref_config)
+                                                      structure_ref_config=structure_ref_config,
+                                                      dt=dt)
 
     # Loop over time steps
     start_time = time.time()
     if read.save_clones == 'one_file':
         buffering = max(1,  n_steps // n_save // 200)
         output_file_name = output_name + '.config'
-        open(output_file_name, 'w', buffering=buffering)
+        loc_file = open(output_file_name, 'w', buffering=buffering)
         velocity_file_name = output_name + '.velocity.dat'
-        open(velocity_file_name, 'w', buffering=buffering)
+        velocity_file = open(velocity_file_name, 'w', buffering=buffering)
         chem_force_file_name = output_name + '.chemforce.dat'
-        open(chem_force_file_name, 'w', buffering=buffering)
+        chem_force_file = open(chem_force_file_name, 'w', buffering=buffering)
 
     for step in range(read.initial_step, n_steps):
         # Save data if...
         if (step % n_save) == 0 and step >= 0:
             elapsed_time = time.time() - start_time
-            print('Step = ', step, ', wallclock time = ', time.time() - start_time)
+            print('Step = ', step, ', wallclock time = ', elapsed_time)
+
+            if domain == '2D':
+                loc_file.write('%s %s\n' % (body.location[0], body.location[1]))
+                velocity_file.write('%s %s %s\n' % (body.prescribed_velocity[0],
+                                                    body.prescribed_velocity[1],
+                                                    body.prescribed_velocity[2]))
+                chem_force_file.write('%s %s\n' % (body.chem_surface_gradient[0], body.chem_surface_gradient[1]))
+            elif domain == '3D':
+                loc_file.write('%s %s %s\n' % (body.location[0], body.location[1], body.location[2]))
+                velocity_file.write('%s %s %s %s\n' % (body.prescribed_velocity[0],
+                                                    body.prescribed_velocity[1],
+                                                    body.prescribed_velocity[2],
+                                                    body.prescribed_velocity[3]))
+                chem_force_file.write('%s %s %s\n' % (body.chem_surface_gradient[0],
+                                                      body.chem_surface_gradient[1],
+                                                      body.chem_surface_gradient[2]))
 
         integrator.advance_time_step(dt, step=step)
 
     # Save final data if...
     if ((step + 1) % n_save) == 0 and step >= 0:
         elapsed_time = time.time() - start_time
-        print('Step = ', step + 1)
-        print(body.location_history)
+        print('Step = ', step + 1, ', wallclock time = ', elapsed_time)
+        if domain == '2D':
+            loc_file.write('%s %s\n' % (body.location[0], body.location[1]))
+            velocity_file.write('%s %s %s\n' % (body.prescribed_velocity[0],
+                                                body.prescribed_velocity[1],
+                                                body.prescribed_velocity[2]))
+            chem_force_file.write('%s %s\n' % (body.chem_surface_gradient[0], body.chem_surface_gradient[1]))
+        elif domain == '3D':
+            loc_file.write('%s %s %s\n' % (body.location[0], body.location[1], body.location[2]))
+            velocity_file.write('%s %s %s %s\n' % (body.prescribed_velocity[0],
+                                                   body.prescribed_velocity[1],
+                                                   body.prescribed_velocity[2],
+                                                   body.prescribed_velocity[3]))
+            chem_force_file.write('%s %s %s\n' % (body.chem_surface_gradient[0],
+                                                  body.chem_surface_gradient[1],
+                                                  body.chem_surface_gradient[2]))
 
+    with open(output_name + '.time', 'w') as f:
+        f.write(str(time.time() - start_time) + '\n')
