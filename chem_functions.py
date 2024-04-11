@@ -36,7 +36,7 @@ def calc_tangential_gradient_part(structure_ref_config, seq, gradient):
 
 
 def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, *args, **kwargs):
-    chem_gradient = np.zeros([1, 2])
+    chem_gradient = np.zeros([2])
     step = kwargs.get('step')
     location = body.location
     location_history = body.location_history
@@ -44,10 +44,10 @@ def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, 
 
     # first guess
     if step == 0 and step >= 0:
-        chem_gradient = np.zeros([1, 2])
+        chem_gradient = np.zeros([2])
     # after initialized: second step only have
     elif step == 1 and step >= 0:
-        surface_gradient_history_sum = np.zeros([1, 2])
+        surface_gradient_history_sum = np.zeros([2])
         for seq, loc in enumerate(target_points_abs_loc):
             gradient_history_part = calc_gradient_history_part_2d(loc, location_history, peclet_number, step, dt)
             surface_gradient_history = calc_tangential_gradient_part(structure_ref_config, seq, gradient_history_part)
@@ -55,7 +55,7 @@ def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, 
 
         chem_gradient = surface_gradient_history_sum
     elif step >= 2 and step >= 0:
-        surface_gradient_sum = np.zeros([1, 2])
+        surface_gradient_sum = np.zeros([2])
         for seq, loc in enumerate(target_points_abs_loc):
             gradient_history_part = calc_gradient_history_part_2d(loc, location_history, peclet_number, step, dt)
             gradient_local_part = calc_gradient_local_part_2d(loc, location_history, peclet_number, step, dt)
