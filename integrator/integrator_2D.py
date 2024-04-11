@@ -44,7 +44,7 @@ class ChemoIntegrator2D(object):
             if self.first_step == False:
                 # Use history-local compose method
                 chem_force = self.calc_surface_gradient_circle(self.body, *args, **kwargs)
-                chem_prop = self.mobility_alpha * chem_force
+                chem_prop = self.mobility_alpha/(2 * np.pi) * chem_force
                 angular_velocity = self.intrinsic_velocity[1]  # noise required
                 angular_velocity_dt = (1.5 * angular_velocity - 0.5 * self.velocities_previous_step[2]) * dt
                 orientation_new = np.dot(self.rotation_matrix_2d(angular_velocity_dt), body.orientation)
@@ -54,6 +54,7 @@ class ChemoIntegrator2D(object):
                 body.location = location_new
                 velocity = np.append(linear_velocity_compose, angular_velocity)
                 body.prescribed_velocity = velocity
+                body.chem_surface_gradient = chem_force
 
             else:
                 # Use forward Euler method
@@ -68,6 +69,7 @@ class ChemoIntegrator2D(object):
                 body.location = location_new
                 velocity = np.append(linear_velocity_compose, angular_velocity)
                 body.prescribed_velocity = velocity
+                body.chem_surface_gradient = chem_force
 
             # Update configuration
             body.location_history[step + 1, :] = location_new
