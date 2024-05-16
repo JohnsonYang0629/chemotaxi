@@ -4,13 +4,14 @@ from functools import partial
 
 class ChemoIntegrator2D(object):
 
-    def __init__(self, body, scheme, domain):
+    def __init__(self, body, scheme, domain, numerical_method):
         """
         Initialize object
         """
         self.body = body
         self.scheme = scheme
         self.domain = domain
+        self.numerical_method = numerical_method
 
         # Other variables
         self.velocities = None
@@ -47,16 +48,20 @@ class ChemoIntegrator2D(object):
                 chem_prop = self.mobility_alpha/(2 * np.pi) * chem_force
                 angular_velocity = self.intrinsic_velocity[1]  # noise required
                 # Two-step Adams-Bashforth method
-                angular_velocity_dt = (1.5 * angular_velocity - 0.5 * self.velocities_previous_step[2]) * dt
+                if self.numerical_method == "adams_bashforth_2":
+                    angular_velocity_dt = (1.5 * angular_velocity - 0.5 * self.velocities_previous_step[2]) * dt
                 # Forward Euler method
-                # angular_velocity_dt = angular_velocity * dt
+                if self.numerical_method == "forward_euler":
+                    angular_velocity_dt = angular_velocity * dt
                 orientation_new = np.dot(self.rotation_matrix_2d(angular_velocity_dt), body.orientation)
                 body.orientation = orientation_new
                 linear_velocity_compose = orientation_new + chem_prop
                 # Two-step Adams-Bashforth method
-                location_new = body.location + (1.5 * linear_velocity_compose - 0.5 * self.velocities_previous_step[0:2]) * dt
+                if self.numerical_method == "adams_bashforth_2":
+                    location_new = body.location + (1.5 * linear_velocity_compose - 0.5 * self.velocities_previous_step[0:2]) * dt
                 # Forward Euler method
-                # location_new = body.location + linear_velocity_compose * dt
+                if self.numerical_method == "forward_euler":
+                    location_new = body.location + linear_velocity_compose * dt
                 body.location = location_new
                 velocity = np.append(linear_velocity_compose, angular_velocity)
                 body.prescribed_velocity = velocity
