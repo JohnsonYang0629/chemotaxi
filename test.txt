@@ -3,29 +3,32 @@ job_name                    test_2d
 job_type                    dynamic
 domain                      2D
 scheme                      history_local_compose_2d
+acceleration                parallel
+core                        8
+numerical_method            forward_euler
 
 # Parameters specification
-mobility_alpha              0
+mobility_alpha              12
 radius                      1
 intrinsic_linear_velocity   1
 intrinsic_angular_velocity  1
 emission_rate               1
 persistence_length          1
 
-peclet_number               1
+peclet_number               120
 
 initial_position            0 0
 initial_orientation         1 0
 
 # Numerical simulation configuration
 droplet_num                 1
-n_steps                     10
-dt                          0.01
+n_steps                     80000
+dt                          0.00390625
 
 # Output configuration
-output_name                 test_2d
+output_name                 simulation_results/chemo_positive_pe_120_lambda_12_HL_parallel
 save_clones				    one_file
 initial_step                0
 
 # Discretization info
-structure                   unit_circle_N6.vertex
+structure                   structures/circle_R_1_N60.vertex
