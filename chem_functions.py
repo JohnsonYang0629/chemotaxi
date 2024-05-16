@@ -118,6 +118,8 @@ def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, 
     location = body.location
     location_history = body.location_history
     target_points_abs_loc = structure_ref_config + location
+    acceleration = kwargs.get('acceleration')
+    num_core = kwargs.get('core')
 
     # First guess
     if step == 0 and step >= 0:
@@ -132,35 +134,37 @@ def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, 
 
         chem_gradient = 2 * np.pi/np.shape(structure_ref_config)[0] * surface_gradient_history_sum
 
-    elif 2 <= step <= 100000:
+    elif step >= 2 and acceleration == "numba":
         # Numba accelerated
+        # Averaged calculation time/step < 0.1s for step<=10000
         surface_gradient_sum = np.zeros([2])
         for seq, loc in enumerate(target_points_abs_loc):
             gradient_history_part = calc_gradient_history_part_2d(loc, location_history, peclet_number, step, dt)
-            #gradient_local_part = calc_gradient_local_part_2d(loc, location_history, peclet_number, step, dt)
-            chemical_gradient_sum = gradient_history_part #+ gradient_local_part
+            gradient_local_part = calc_gradient_local_part_2d(loc, location_history, peclet_number, step, dt)
+            chemical_gradient_sum = gradient_history_part + gradient_local_part
             surface_gradient = calc_tangential_gradient_part(structure_ref_config, seq, chemical_gradient_sum)
             surface_gradient_sum += surface_gradient
 
         chem_gradient = 2 * np.pi/np.shape(structure_ref_config)[0] * surface_gradient_sum
 
-    elif step >= 100000 and step >= 0:
+    elif step >= 2 and acceleration == "parallel":
         # Accelerated with Python built-in parallel computing method apply_async
         # Parallel Pools: target points (discretization number of the structure)
         # Potentially useful for EXTRA-long simulation and fine grid of the structure (or even 3D cases)
+        # Averaged calculation time/step ~= 0.1s
         surface_gradient_sum = np.zeros([2])
         target_points_num = np.arange(np.shape(structure_ref_config)[0])
-        num_cores = int(mp.cpu_count())
-        process_pool = mp.Pool(num_cores - 2)
-        start_time = time.time()
+        #num_cores = int(mp.cpu_count())
+        process_pool = mp.Pool(num_core)
+        #start_time = time.time()
         points_gradient_results = [process_pool.apply_async(calc_gradient_2d_parallel,
                                    args=(seq, target_points_abs_loc, location_history, structure_ref_config, peclet_number, step, dt))
                                    for seq in target_points_num]
         process_pool.close()
         process_pool.join()
         points_gradient = [segment.get() for segment in points_gradient_results]
-        elapsed_time = time.time() - start_time
-        print('parallel process time = ', elapsed_time)
+        #elapsed_time = time.time() - start_time
+        #print('parallel process time = ', elapsed_time)
         surface_gradient_sum += np.sum(points_gradient, 0)
         chem_gradient = 2 * np.pi/np.shape(structure_ref_config)[0] * surface_gradient_sum
 
