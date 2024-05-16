@@ -42,7 +42,9 @@ class ReadInput(object):
     self.job_type = str(self.options.get('job_type') or 'None')
     self.domain = str(self.options.get('domain') or '2D')
     self.scheme = str(self.options.get('scheme') or 'HLP_2D')
-    self.parallel = str(self.options.get('parallel') or 'False')
+    self.acceleration = str(self.options.get('acceleration') or 'numba')
+    self.core = int(self.options.get('core') or 1)
+    self.numerical_method = str(self.options.get('numerical_method') or 'forward_euler')
 
     self.mobility_alpha = float(self.options.get('mobility_alpha') or 1)
     self.radius = float(self.options.get('radius') or 1.0)
