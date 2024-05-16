@@ -29,6 +29,7 @@ if __name__ == '__main__':
 
     scheme = read.scheme
     domain = read.domain
+    numerical_method = read.numerical_method
     n_steps = read.n_steps
     n_save = read.n_save
     dt = read.dt
@@ -49,11 +50,11 @@ if __name__ == '__main__':
     if domain == '2D':
         body = body_2D.Body2D(initial_struct_location, initial_struct_orientations, n_steps)
         body.location_history[0, :] = initial_struct_location
-        integrator = ChemoIntegrator2D(body, scheme, domain)
+        integrator = ChemoIntegrator2D(body, scheme, domain, numerical_method)
     elif domain == '3D':
         body = body_3D.Body3D(initial_struct_location, initial_struct_orientations, n_steps)
         body.location_history[0, :] = initial_struct_location
-        integrator = ChemoIntegrator3D(body, scheme, domain)
+        integrator = ChemoIntegrator3D(body, scheme, domain, numerical_method)
     else:
         print('Domain should use \"2D\" or \"3D\". \n')
         exit()
@@ -63,6 +64,8 @@ if __name__ == '__main__':
     integrator.intrinsic_velocity = intrinsic_velocity
     integrator.rotation_matrix_2d = chem_functions.rotation_matrix_2d
     integrator.calc_surface_gradient_circle = partial(chem_functions.calc_surface_gradient_circle,
+                                                      acceleration=read.acceleration,
+                                                      core = read.core,
                                                       peclet_number=read.peclet_number,
                                                       structure_ref_config=structure_ref_config,
                                                       dt=dt)
@@ -77,6 +80,8 @@ if __name__ == '__main__':
         velocity_file = open(velocity_file_name, 'w', buffering=buffering)
         chem_force_file_name = output_name + '.chemforce.dat'
         chem_force_file = open(chem_force_file_name, 'w', buffering=buffering)
+        time_log_file_name = output_name + '.time.log'
+        time_log_file = open(time_log_file_name, 'w', buffering=buffering)
 
     for step in range(read.initial_step, n_steps):
         # Save data if...
@@ -90,6 +95,7 @@ if __name__ == '__main__':
                                                     body.prescribed_velocity[1],
                                                     body.prescribed_velocity[2]))
                 chem_force_file.write('%s %s\n' % (body.chem_surface_gradient[0], body.chem_surface_gradient[1]))
+                time_log_file.write(str(elapsed_time) + '\n')
             elif domain == '3D':
                 loc_file.write('%s %s %s\n' % (body.location[0], body.location[1], body.location[2]))
                 velocity_file.write('%s %s %s %s\n' % (body.prescribed_velocity[0],
@@ -112,6 +118,7 @@ if __name__ == '__main__':
                                                 body.prescribed_velocity[1],
                                                 body.prescribed_velocity[2]))
             chem_force_file.write('%s %s\n' % (body.chem_surface_gradient[0], body.chem_surface_gradient[1]))
+            time_log_file.write(str(elapsed_time) + '\n')
         elif domain == '3D':
             loc_file.write('%s %s %s\n' % (body.location[0], body.location[1], body.location[2]))
             velocity_file.write('%s %s %s %s\n' % (body.prescribed_velocity[0],
