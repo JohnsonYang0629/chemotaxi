@@ -98,13 +98,16 @@ if __name__ == '__main__':
                 time_log_file.write(str(elapsed_time) + '\n')
             elif domain == '3D':
                 loc_file.write('%s %s %s\n' % (body.location[0], body.location[1], body.location[2]))
-                velocity_file.write('%s %s %s %s\n' % (body.prescribed_velocity[0],
-                                                    body.prescribed_velocity[1],
-                                                    body.prescribed_velocity[2],
-                                                    body.prescribed_velocity[3]))
+                velocity_file.write('%s %s %s %s %s %s\n' % (body.prescribed_velocity[0],
+                                                             body.prescribed_velocity[1],
+                                                             body.prescribed_velocity[2],
+                                                             body.prescribed_velocity[3],
+                                                             body.prescribed_velocity[4],
+                                                             body.prescribed_velocity[5]))
                 chem_force_file.write('%s %s %s\n' % (body.chem_surface_gradient[0],
                                                       body.chem_surface_gradient[1],
                                                       body.chem_surface_gradient[2]))
+                time_log_file.write(str(elapsed_time) + '\n')
 
         integrator.advance_time_step(dt, step=step)
 
@@ -121,13 +124,16 @@ if __name__ == '__main__':
             time_log_file.write(str(elapsed_time) + '\n')
         elif domain == '3D':
             loc_file.write('%s %s %s\n' % (body.location[0], body.location[1], body.location[2]))
-            velocity_file.write('%s %s %s %s\n' % (body.prescribed_velocity[0],
-                                                   body.prescribed_velocity[1],
-                                                   body.prescribed_velocity[2],
-                                                   body.prescribed_velocity[3]))
+            velocity_file.write('%s %s %s %s %s %s\n' % (body.prescribed_velocity[0],
+                                                         body.prescribed_velocity[1],
+                                                         body.prescribed_velocity[2],
+                                                         body.prescribed_velocity[3],
+                                                         body.prescribed_velocity[4],
+                                                         body.prescribed_velocity[5]))
             chem_force_file.write('%s %s %s\n' % (body.chem_surface_gradient[0],
                                                   body.chem_surface_gradient[1],
                                                   body.chem_surface_gradient[2]))
+            time_log_file.write(str(elapsed_time) + '\n')
 
     with open(output_name + '.time', 'w') as f:
         f.write(str(time.time() - start_time) + '\n')

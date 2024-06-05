@@ -2,18 +2,20 @@ import numpy as np
 import copy
 import sys
 
-class Body_3D(object):
+
+class Body3D(object):
   '''
   Small class to handle a single body in 3D domain.
   '''
-  def __init__(self, location, orientation):
+  def __init__(self, location, orientation, n_steps):
     '''
     Constructor. Take arguments like ...
     '''
-    # Location as np.array.shape = 2
+    # Location as np.array.shape = 3
     self.location = np.copy(location)
     self.location_new = np.copy(location)
     self.location_old = np.copy(location)
+    self.location_history = np.zeros([n_steps + 1, 3])
     # Orientation as Quaternion
     self.orientation = copy.copy(orientation)
     self.orientation_new = copy.copy(orientation)
@@ -25,6 +27,7 @@ class Body_3D(object):
     self.function_force = self.default_none
     self.function_torque = self.default_none
     self.prescribed_velocity = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    self.chem_surface_gradient = np.array([0.0, 0.0, 0.0])
     self.ID = None
 
   def calc_prescribed_velocity(self):
