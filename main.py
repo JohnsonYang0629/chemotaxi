@@ -36,6 +36,7 @@ if __name__ == '__main__':
 
     initial_struct_location = read.initial_position
     initial_struct_orientations = read.initial_orientation
+    initial_omega_orientations = read.initial_orientation  # need modification
     intrinsic_linear_velocity = read.intrinsic_linear_velocity
     intrinsic_angular_velocity = read.intrinsic_angular_velocity
     intrinsic_velocity = np.array([intrinsic_linear_velocity, intrinsic_angular_velocity])
@@ -52,7 +53,7 @@ if __name__ == '__main__':
         body.location_history[0, :] = initial_struct_location
         integrator = ChemoIntegrator2D(body, scheme, domain, numerical_method)
     elif domain == '3D':
-        body = body_3D.Body3D(initial_struct_location, initial_struct_orientations, n_steps)
+        body = body_3D.Body3D(initial_struct_location, initial_struct_orientations, initial_omega_orientations, n_steps)
         body.location_history[0, :] = initial_struct_location
         integrator = ChemoIntegrator3D(body, scheme, domain, numerical_method)
     else:
@@ -62,13 +63,21 @@ if __name__ == '__main__':
     integrator.peclet_number = read.peclet_number
     integrator.mobility_alpha = read.mobility_alpha
     integrator.intrinsic_velocity = intrinsic_velocity
-    integrator.rotation_matrix_2d = chem_functions.rotation_matrix_2d
-    integrator.calc_surface_gradient_circle = partial(chem_functions.calc_surface_gradient_circle,
-                                                      acceleration=read.acceleration,
-                                                      core = read.core,
-                                                      peclet_number=read.peclet_number,
-                                                      structure_ref_config=structure_ref_config,
-                                                      dt=dt)
+    if domain == '2D':
+        integrator.rotation_matrix_2d = chem_functions.rotation_matrix_2d
+        integrator.calc_surface_gradient_circle = partial(chem_functions.calc_surface_gradient_circle,
+                                                          acceleration=read.acceleration,
+                                                          core=read.core,
+                                                          peclet_number=read.peclet_number,
+                                                          structure_ref_config=structure_ref_config,
+                                                          dt=dt)
+    elif domain == '3D':
+        integrator.calc_surface_gradient_sphere = partial(chem_functions.calc_surface_gradient_circle,
+                                                          acceleration=read.acceleration,
+                                                          core=read.core,
+                                                          peclet_number=read.peclet_number,
+                                                          structure_ref_config=structure_ref_config,
+                                                          dt=dt)
 
     # Loop over time steps
     start_time = time.time()
