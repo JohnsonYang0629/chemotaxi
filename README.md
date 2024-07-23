@@ -138,18 +138,18 @@ parallel acceleration is recommended for EXTRA-long simulation and fine grid of 
 
 * `mobility_alpha` (float (default 1)): In the JCP paper and my note, we use notation $\Lambda$, which is a mobility parameter to determine
 the magnitude of the chemical force.
-* `radius` (float (default 1)): The geometric radius of the droplet. Normally we use non-dimensionlized parameter R=1.
+* `radius` (float (default 1)): The geometric radius of the droplet. Normally we use non-dimensionlized parameter $R=1$.
 * `intrinsic_linear_velocity` (float (default 1)): The intrinsic linear velocity of the droplet. 
-Normally we use non-dimensionlized parameter v_0=1.
+Normally we use non-dimensionlized parameter $v_0=1$.
 * `intrinsic_angular_velocity` (float (default 1)): The intrinsic angular velocity of the droplet.
-Normally we use non-dimensionlized parameter \omega_0=1.
+Normally we use non-dimensionlized parameter $\omega_0=1$.
 * `emission_rate` (float (default 1)): The emission rate of the chemical substance. 
-Normally we use non-dimensionlized parameter Q_0=1.
+Normally we use non-dimensionlized parameter $Q_0=1$.
 * `persistence_length` (float (default 1))).
 * `peclet_number`(float (default 1)): $Pe = Rv_o/D$, 
 is the ratio of self-propelling rate of the droplet to diffusion rate of emitted solute.
-* `initial_position`(float (vector default 0 0)): Vector format, 2D in format (x_0, y_0), 3D in format (x_0, y_0, z_0)
-* `initial_orientation`(float (vector default 0 0 )): Vector format, 2D in format (R\cos\theta, R\sin\theta), 3D use quaternion format (NOT implemented yet).
+* `initial_position`(float (vector default 0 0)): Vector format, 2D in format $(x_0, y_0)$, 3D in format $(x_0, y_0, z_0)$
+* `initial_orientation`(float (vector default 0 0 )): Vector format, 2D in format $(R\cos\theta, R\sin\theta)$, 3D use quaternion format (NOT implemented yet).
 * `droplet_num`(int (default 1)): Currently this code only support single particle cases.
 * `n_steps`(int (default 1)): Number of simulation steps.
 * `dt`(float): time step length to advance the simulation.
@@ -173,3 +173,4 @@ the schemes to integrate the equations of motion.
 * **structures/**: it stores `.vertex` files.
 * **tools/**: start-up useful tools (NOT necessary).
 * **main.py**: it calls, processes and advances for simulations.
+* **chem_functions.py**: it calculates related chemical gradient forces (to be called).
