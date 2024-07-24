@@ -96,7 +96,9 @@ def calc_gradient_2d_parallel(seq, target_points_abs_loc, location_history, stru
                                                       location_history, peclet_number, step, dt)
     surface_gradient = calc_tangential_gradient_part(structure_ref_config, seq,
                                                      gradient_history_part + gradient_local_part)
-    return surface_gradient
+    surface_gradient_local = calc_tangential_gradient_part(structure_ref_config, seq, gradient_local_part)
+    surface_gradient_history = calc_tangential_gradient_part(structure_ref_config, seq, gradient_history_part)
+    return [surface_gradient, surface_gradient_local, surface_gradient_history]
 
 
 def calc_gradient_3d_parallel(seq, target_points_abs_loc, location_history, structure_ref_config, peclet_number, step, dt):
@@ -128,9 +130,11 @@ def calc_gradient_local_part_2d(target_position, history_path_location, peclet_n
     position_difference = target_position - history_path_location[step - 1, :]
     position_difference_norm_square = np.power(np.linalg.norm(position_difference), 2)
     rho = peclet_number * position_difference_norm_square/(4 * dt)
-    gradient_local_part = 2 * peclet_number/(4 * np.pi * np.power(position_difference_norm_square, 2)) \
-                            * np.exp(-rho) * (np.power(rho, 2) + 2 * rho + 2) \
-                            * position_difference
+    #gradient_local_part = 2 * peclet_number/(4 * np.pi * np.power(position_difference_norm_square, 2)) \
+    #                        * np.exp(-rho) * (np.power(rho, 2) + 2 * rho + 2) \
+    #                        * position_difference
+    gradient_local_part = 2 * peclet_number / (4 * np.pi * position_difference_norm_square) \
+                            * np.exp(-rho) * position_difference
     return gradient_local_part
 
 
@@ -158,6 +162,7 @@ def calc_tangential_gradient_part_3d(structure_ref_config, seq, gradient):
 
 
 def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, *args, **kwargs):
+    # 2D case for planar particle (a circle)
     chem_gradient = np.zeros([2])
     step = kwargs.get('step')
     location = body.location
@@ -169,6 +174,8 @@ def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, 
     # First guess
     if step == 0 and step >= 0:
         chem_gradient = np.zeros([2])
+        chem_local_part = np.zeros([2])
+        chem_history_part = np.zeros([2])
     # After initialized: second step only have
     elif step == 1 and step >= 0:
         surface_gradient_history_sum = np.zeros([2])
@@ -177,20 +184,28 @@ def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, 
             surface_gradient_history = calc_tangential_gradient_part(structure_ref_config, seq, gradient_history_part)
             surface_gradient_history_sum += surface_gradient_history
 
-        chem_gradient = 2 * np.pi/np.shape(structure_ref_config)[0] * surface_gradient_history_sum
+        chem_gradient = 2 * np.pi / np.shape(structure_ref_config)[0] * surface_gradient_history_sum
+        chem_local_part = np.zeros([2])
+        chem_history_part = 2 * np.pi / np.shape(structure_ref_config)[0] * surface_gradient_history_sum
 
     elif step >= 2 and acceleration == "numba":
         # Numba accelerated
         # Averaged calculation time/step < 0.1s for step<=10000
         surface_gradient_sum = np.zeros([2])
+        surface_gradient_local_sum = np.zeros([2])
+        surface_gradient_history_sum = np.zeros([2])
         for seq, loc in enumerate(target_points_abs_loc):
             gradient_history_part = calc_gradient_history_part_2d(loc, location_history, peclet_number, step, dt)
-            #gradient_local_part = calc_gradient_local_part_2d(loc, location_history, peclet_number, step, dt)
-            chemical_gradient_sum = gradient_history_part #+ gradient_local_part
+            gradient_local_part = calc_gradient_local_part_2d(loc, location_history, peclet_number, step, dt)
+            chemical_gradient_sum = gradient_history_part + gradient_local_part
             surface_gradient = calc_tangential_gradient_part(structure_ref_config, seq, chemical_gradient_sum)
             surface_gradient_sum += surface_gradient
+            surface_gradient_local_sum += calc_tangential_gradient_part(structure_ref_config, seq, gradient_local_part)
+            surface_gradient_history_sum += calc_tangential_gradient_part(structure_ref_config, seq, gradient_history_part)
 
-        chem_gradient = 2 * np.pi/np.shape(structure_ref_config)[0] * surface_gradient_sum
+        chem_gradient = 2 * np.pi / np.shape(structure_ref_config)[0] * surface_gradient_sum
+        chem_local_part = 2 * np.pi / np.shape(structure_ref_config)[0] * surface_gradient_local_sum
+        chem_history_part = 2 * np.pi / np.shape(structure_ref_config)[0] * surface_gradient_history_sum
 
     elif step >= 2 and acceleration == "parallel":
         # Accelerated with Python built-in parallel computing method apply_async
@@ -208,15 +223,19 @@ def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, 
         process_pool.close()
         process_pool.join()
         points_gradient = [segment.get() for segment in points_gradient_results]
+        points_gradient = np.sum(np.array(points_gradient), 0)
+        chem_local_part = points_gradient[1]
+        chem_history_part = points_gradient[2]
         #elapsed_time = time.time() - start_time
         #print('parallel process time = ', elapsed_time)
-        surface_gradient_sum += np.sum(points_gradient, 0)
-        chem_gradient = 2 * np.pi/np.shape(structure_ref_config)[0] * surface_gradient_sum
+        surface_gradient_sum += points_gradient[0]
+        chem_gradient = 2 * np.pi / np.shape(structure_ref_config)[0] * surface_gradient_sum
 
-    return chem_gradient
+    return chem_gradient, chem_local_part, chem_history_part
 
 
 def calc_surface_gradient_sphere(body, peclet_number, structure_ref_config, dt, *args, **kwargs):
+    # 3D case for spherical particle
     chem_gradient = np.zeros([3])
     step = kwargs.get('step')
     location = body.location

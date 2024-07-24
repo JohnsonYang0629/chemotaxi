@@ -44,7 +44,7 @@ class ChemoIntegrator2D(object):
             body = self.body
             if self.first_step == False:
                 # Use history-local compose method
-                chem_force = self.calc_surface_gradient_circle(self.body, *args, **kwargs)
+                chem_force, chem_local, chem_history = self.calc_surface_gradient_circle(self.body, *args, **kwargs)
                 chem_prop = self.mobility_alpha/(2 * np.pi) * chem_force
                 angular_velocity = self.intrinsic_velocity[1]  # noise required
                 # Two-step Adams-Bashforth method
@@ -66,10 +66,12 @@ class ChemoIntegrator2D(object):
                 velocity = np.append(linear_velocity_compose, angular_velocity)
                 body.prescribed_velocity = velocity
                 body.chem_surface_gradient = chem_force
+                body.grad_chem_local_part = chem_local
+                body.grad_chem_history_part = chem_history
 
             else:
                 # Use forward Euler method for the first step
-                chem_force = self.calc_surface_gradient_circle(self.body, *args, **kwargs)
+                chem_force, chem_local, chem_history = self.calc_surface_gradient_circle(self.body, *args, **kwargs)
                 chem_prop = self.mobility_alpha/(2 * np.pi) * chem_force
                 angular_velocity = self.intrinsic_velocity[1]  # noise required
                 angular_velocity_dt = angular_velocity * dt
@@ -81,6 +83,8 @@ class ChemoIntegrator2D(object):
                 velocity = np.append(linear_velocity_compose, angular_velocity)
                 body.prescribed_velocity = velocity
                 body.chem_surface_gradient = chem_force
+                body.grad_chem_local_part = chem_local
+                body.grad_chem_history_part = chem_history
 
             # Update configuration
             body.location_history[step + 1, :] = location_new

@@ -89,6 +89,10 @@ if __name__ == '__main__':
         velocity_file = open(velocity_file_name, 'w', buffering=buffering)
         chem_force_file_name = output_name + '.chemforce.dat'
         chem_force_file = open(chem_force_file_name, 'w', buffering=buffering)
+        grad_chem_local_file_name = output_name + '.chemlocal.dat'
+        grad_chem_local_file = open(grad_chem_local_file_name, 'w', buffering=buffering)
+        grad_chem_history_file_name = output_name + '.chemhistory.dat'
+        grad_chem_history_file = open(grad_chem_history_file_name, 'w', buffering=buffering)
         time_log_file_name = output_name + '.time.log'
         time_log_file = open(time_log_file_name, 'w', buffering=buffering)
 
@@ -104,6 +108,8 @@ if __name__ == '__main__':
                                                     body.prescribed_velocity[1],
                                                     body.prescribed_velocity[2]))
                 chem_force_file.write('%s %s\n' % (body.chem_surface_gradient[0], body.chem_surface_gradient[1]))
+                grad_chem_local_file.write('%s %s\n' % (body.grad_chem_local_part[0], body.grad_chem_local_part[1]))
+                grad_chem_history_file.write('%s %s\n' % (body.grad_chem_history_part[0], body.grad_chem_history_part[1]))
                 time_log_file.write(str(elapsed_time) + '\n')
             elif domain == '3D':
                 loc_file.write('%s %s %s\n' % (body.location[0], body.location[1], body.location[2]))

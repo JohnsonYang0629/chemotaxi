@@ -28,6 +28,8 @@ class Body2D(object):
     self.function_torque = self.default_none
     self.prescribed_velocity = np.array([0.0, 0.0, 0.0])
     self.chem_surface_gradient = np.array([0.0, 0.0])
+    self.grad_chem_local_part = np.array([0.0, 0.0])
+    self.grad_chem_history_part = np.array([0.0, 0.0])
     self.ID = None
 
   def calc_prescribed_velocity(self):
