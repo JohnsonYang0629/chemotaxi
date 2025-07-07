@@ -1,6 +1,10 @@
 import numpy as np
 import scipy.special as sc
 import sys
+from scipy.special import kn, k0, k1, erfc
+import math
+from scipy import integrate
+from numba import njit, prange
 from numba import jit
 import time
 try:
@@ -185,8 +189,8 @@ def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, 
         surface_gradient_sum = np.zeros([2])
         for seq, loc in enumerate(target_points_abs_loc):
             gradient_history_part = calc_gradient_history_part_2d(loc, location_history, peclet_number, step, dt)
-            #gradient_local_part = calc_gradient_local_part_2d(loc, location_history, peclet_number, step, dt)
-            chemical_gradient_sum = gradient_history_part #+ gradient_local_part
+            gradient_local_part = calc_gradient_local_part_2d(loc, location_history, peclet_number, step, dt)
+            chemical_gradient_sum = gradient_history_part + gradient_local_part
             surface_gradient = calc_tangential_gradient_part(structure_ref_config, seq, chemical_gradient_sum)
             surface_gradient_sum += surface_gradient
 
@@ -216,7 +220,7 @@ def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, 
     return chem_gradient
 
 
-def calc_surface_gradient_sphere(body, peclet_number, structure_ref_config, dt, *args, **kwargs):
+def calc_surface_gradient_sphere_old(body, peclet_number, structure_ref_config, dt, *args, **kwargs):
     chem_gradient = np.zeros([3])
     step = kwargs.get('step')
     location = body.location
@@ -320,3 +324,208 @@ def cart2sph_vector_3d(cart_vector):
     return sph_vector
 
 
+# ==============================================================================
+# 3D Function (Using Analytical Formula for Local Part)
+# ==============================================================================
+
+def get_chem_grad_3D(body, peclet_number, dt, *args, **kwargs):
+    """
+    Calculates the 3D chemical gradient.
+    - History part: Sum over discrete time steps.
+    - Local part: Uses the analytical formula from the paper (Eq. 17).
+    """
+    surface_nodes = body.get_surface_nodes()
+    total_grad_C_on_nodes = np.zeros_like(surface_nodes)
+    D = peclet_number ** -1
+    step = kwargs.get('step')
+    t_now = body.counter * dt
+
+    # History Part (C_H): Sum over discrete steps from t=0 to t_now - dt
+    if step > 1:
+        for i in range(step - 1):
+            t_prime = i * dt
+            tau = t_now - t_prime
+            pos_prime = body.location_history[i]
+
+            for j, r_s in enumerate(surface_nodes):
+                r_vec = r_s - pos_prime
+                r_sq = np.dot(r_vec, r_vec)
+                if tau <= 1e-12: continue
+                G = (4 * np.pi * D * tau) ** (-1.5) * np.exp(-r_sq / (4 * D * tau))
+                grad_G = -r_vec / (2 * D * tau) * G
+                total_grad_C_on_nodes[j] += grad_G * dt
+
+    # Local Part (C_L): Analytical solution for the integral over the last time step
+    if body.counter > 0:
+        pos_t_now = body.location
+        pos_t_before = body.location_history[-1]
+        v_k = (pos_t_now - pos_t_before) / dt
+        V_sq = np.dot(v_k, v_k)
+
+        for j, r_s in enumerate(surface_nodes):
+            r_sk_vec = r_s - pos_t_now
+            R = np.linalg.norm(r_sk_vec)
+
+            if R < 1e-12: continue
+
+            # Implementation of analytical solution from Eq. 15, 16, 17
+            r_sk_hat = r_sk_vec / R
+            v_dot_r_hat = np.dot(v_k, r_sk_hat)
+            v_parallel_vec = v_dot_r_hat * r_sk_hat
+            v_perp_vec = v_k - v_parallel_vec
+            v_perp_sq = np.dot(v_perp_vec, v_perp_vec)
+
+            arg_erfc = -v_dot_r_hat / (2 * np.sqrt(D / dt))
+
+            exp_term_F = np.exp(-V_sq * dt / (4 * D))
+            exp_term_R = np.exp(-R ** 2 / (4 * D * dt))
+            F = (1 / R ** 3) * (exp_term_F * erfc(arg_erfc) - exp_term_R)
+
+            exp_term_G = np.exp(-v_perp_sq * dt / (4 * D))
+            G = (1 / R) * np.sqrt(dt / (np.pi * D)) * exp_term_G
+
+            grad_C_local = (1 / (4 * np.pi * D)) * (F * r_sk_vec + G * v_k)
+            total_grad_C_on_nodes[j] += grad_C_local
+
+    return total_grad_C_on_nodes
+
+
+# ==============================================================================
+# 3D Functions (Numba-accelerated version with Analytical Local Part)
+# ==============================================================================
+
+@njit(parallel=True, fastmath=True)
+def _history_part_3d_numba(n_nodes, surface_nodes, n_history_steps, pos_history_arr, t_now, dt, D):
+    """Numba-jitted function for the history part of the gradient."""
+    total_grad_C = np.zeros((n_nodes, 3))
+    for j in prange(n_nodes):
+        r_s = surface_nodes[j]
+        grad_sum = np.zeros(3)
+        for i in range(n_history_steps):
+            t_prime = i * dt
+            tau = t_now - t_prime
+            pos_prime = pos_history_arr[i]
+            r_vec = r_s - pos_prime
+            r_sq = r_vec[0] ** 2 + r_vec[1] ** 2 + r_vec[2] ** 2
+            if tau <= 1e-12: continue
+            const = (4 * np.pi * D * tau)
+            G = np.power(const, -1.5) * np.exp(-r_sq / const)
+            grad_G = -r_vec / (2 * D * tau) * G
+            grad_sum += grad_G
+        total_grad_C[j] = grad_sum * dt
+    return total_grad_C
+
+
+@njit(parallel=True, fastmath=True)
+def _local_part_3d_numba_analytical(n_nodes, surface_nodes, pos_t_now, pos_t_before, D, dt):
+    """Numba-jitted function for the local part, using the analytical formula."""
+    total_grad_C_local = np.zeros((n_nodes, 3))
+    v_k = (pos_t_now - pos_t_before) / dt
+    V_sq = v_k[0] ** 2 + v_k[1] ** 2 + v_k[2] ** 2
+
+    for j in prange(n_nodes):
+        r_s = surface_nodes[j]
+        r_sk_vec = r_s - pos_t_now
+        R_sq = r_sk_vec[0] ** 2 + r_sk_vec[1] ** 2 + r_sk_vec[2] ** 2
+
+        if R_sq < 1e-24: continue
+        R = math.sqrt(R_sq)
+
+        # Implementation of analytical solution from Eq. 15, 16, 17
+        v_dot_r = v_k[0] * r_sk_vec[0] + v_k[1] * r_sk_vec[1] + v_k[2] * r_sk_vec[2]
+        v_dot_r_hat = v_dot_r / R
+
+        v_parallel_x = v_dot_r_hat * r_sk_vec[0] / R
+        v_parallel_y = v_dot_r_hat * r_sk_vec[1] / R
+        v_parallel_z = v_dot_r_hat * r_sk_vec[2] / R
+
+        v_perp_x = v_k[0] - v_parallel_x
+        v_perp_y = v_k[1] - v_parallel_y
+        v_perp_z = v_k[2] - v_parallel_z
+
+        v_perp_sq = v_perp_x ** 2 + v_perp_y ** 2 + v_perp_z ** 2
+
+        # math.erf is supported by numba, erfc(x) = 1 - erf(x)
+        arg_erf = v_dot_r_hat / (2 * math.sqrt(D / dt))
+        erfc_val = 1.0 - math.erf(arg_erf)
+
+        exp_term_F = math.exp(-V_sq * dt / (4 * D))
+        exp_term_R = math.exp(-R_sq / (4 * D * dt))
+        F = (1 / (R ** 3)) * (exp_term_F * erfc_val - exp_term_R)
+
+        exp_term_G = math.exp(-v_perp_sq * dt / (4 * D))
+        G = (1 / R) * math.sqrt(dt / (math.pi * D)) * exp_term_G
+
+        # grad_C_local = (1 / (4 * pi * D)) * (F * r_sk_vec + G * v_k)
+        const = 1 / (4 * math.pi * D)
+        total_grad_C_local[j, 0] = const * (F * r_sk_vec[0] + G * v_k[0])
+        total_grad_C_local[j, 1] = const * (F * r_sk_vec[1] + G * v_k[1])
+        total_grad_C_local[j, 2] = const * (F * r_sk_vec[2] + G * v_k[2])
+
+    return total_grad_C_local
+
+
+def get_chem_grad_3D_numba(body, peclet_number, dt, *args, **kwargs):
+    """Numba-accelerated version using the analytical formula for the local part."""
+    surface_nodes = body.get_surface_nodes()
+    total_grad_C_on_nodes = np.zeros_like(surface_nodes)
+    D = peclet_number ** -1
+    t_now = body.counter * dt
+    step = kwargs.get('step')
+    n_nodes = body.n_nodes
+
+    # History Part
+    if step > 1:
+        n_history_steps = step - 1
+        pos_history_arr = np.array(body.location_history[:n_history_steps])
+        grad_C_history = _history_part_3d_numba(n_nodes, surface_nodes, n_history_steps, pos_history_arr, t_now, dt, D)
+        total_grad_C_on_nodes += grad_C_history
+
+    # Local Part (Analytical)
+    if body.counter > 0:
+        pos_t_now = body.location
+        pos_t_before = body.location_history[-1]
+        grad_C_local = _local_part_3d_numba_analytical(n_nodes, surface_nodes, pos_t_now, pos_t_before, D, dt)
+        total_grad_C_on_nodes += grad_C_local
+
+    return total_grad_C_on_nodes
+
+
+def calc_tangential_grad_3D(body, peclet_number, dt, *args, **kwargs):
+    """
+    This is the main public function to get the tangential chemical gradient on the body surface.
+    It acts as a wrapper, calling the appropriate backend (SciPy or Numba) to get the
+    full 3D gradient, and then projects it to the surface to get the tangential component.
+
+    Args:
+        body (Body3D): The 3D body object.
+        sim_config (object): The simulation configuration object.
+        use_numba (bool): Flag to select the calculation backend. True for Numba, False for SciPy.
+
+    Returns:
+        np.ndarray: An array of tangential gradient vectors for each surface node.
+    """
+    # Step 1: Get the full 3D gradient using the selected backend
+    acceleration = kwargs.get('acceleration')
+    if acceleration == "numba":
+        grad_C_on_nodes = get_chem_grad_3D_numba(body, peclet_number, dt, *args, **kwargs)
+    else:
+        grad_C_on_nodes = get_chem_grad_3D(body, peclet_number, dt, *args, **kwargs)
+
+    # Step 2: Project the full gradient to the tangential plane
+    nodes_world = body.get_surface_nodes()
+    r_vectors = nodes_world - body.location
+
+    # Calculate the normal vector at each surface node.
+    r_vectors_norm = np.linalg.norm(r_vectors, axis=1, keepdims=True)
+    r_vectors_norm[r_vectors_norm < 1e-12] = 1.0  # Avoid division by zero
+    normals = r_vectors / r_vectors_norm
+
+    # Project the full gradient onto the normal vector to get the normal component.
+    grad_dot_norm = np.sum(grad_C_on_nodes * normals, axis=1, keepdims=True)
+    grad_normal_component = grad_dot_norm * normals
+
+    # The tangential gradient is the full gradient minus its normal component.
+    grad_tangential = grad_C_on_nodes - grad_normal_component
+
+    return grad_tangential

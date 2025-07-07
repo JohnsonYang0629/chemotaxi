@@ -21,7 +21,7 @@ class ChemoIntegrator3D(object):
         self.intrinsic_velocity = np.array([0, 0])  # compact vector [v_0,omega_0]
 
         # Optional variables
-        self.calc_surface_gradient_sphere = None
+        self.calc_tangential_grad_3D = None
         self.rotation_matrix_3d = None
 
     def advance_time_step(self, dt, *args, **kwargs):
@@ -46,7 +46,7 @@ class ChemoIntegrator3D(object):
             body = self.body
             if self.first_step == False:
                 # Use history-local compose method
-                chem_force = self.calc_surface_gradient_sphere(self.body, *args, **kwargs)
+                chem_force = self.calc_tangential_grad_3D(self.body, *args, **kwargs)
                 chem_prop = self.mobility_alpha / (4 * np.pi) * chem_force
                 angular_velocity = self.intrinsic_velocity[1]  # noise required
                 # Two-step Adams-Bashforth method
@@ -75,11 +75,13 @@ class ChemoIntegrator3D(object):
 
             else:
                 # Use forward Euler method for the first step
-                chem_force = self.calc_surface_gradient_sphere(self.body, *args, **kwargs)
+                chem_force = self.calc_tangential_grad_3D(self.body, *args, **kwargs)
                 chem_prop = self.mobility_alpha / (4 * np.pi) * chem_force
+
                 angular_velocity = self.intrinsic_velocity[1]  # noise required
                 angular_velocity_dt = angular_velocity * dt * body.omega_orientation
                 active_torque = self.rotation_matrix_3d(angular_velocity_dt)
+
                 v_orientation_new = np.dot(active_torque, body.v_orientation)
                 omega_orientation_new = np.dot(active_torque, body.omega_orientation)
                 body.v_orientation = v_orientation_new

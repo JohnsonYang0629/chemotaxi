@@ -54,10 +54,15 @@ class ReadInput(object):
     self.persistence_length = float(self.options.get('persistence_length') or 1.0)
     self.peclet_number = float(self.options.get('peclet_number') or 1.0)
 
-    self.initial_position = np.fromstring(self.options.get('initial_position') or '0 0', sep=' ')
-    self.initial_orientation = np.fromstring(self.options.get('initial_orientation') or '0 0 0 0', sep=' ')
+    self.initial_position_2D = np.fromstring(self.options.get('initial_position_2D') or '0 0', sep=' ')
+    self.initial_orientation_2D_vector = np.fromstring(self.options.get('initial_orientation_2D_vector') or '0 0',
+                                                       sep=' ')
+    self.initial_position_3D = np.fromstring(self.options.get('initial_position_3D') or '0 0 0', sep=' ')
+    self.initial_orientation_3D_quaternion = np.fromstring(self.options.get('initial_orientation_3D_quaternion') or
+                                                           '1 0 0 0', sep=' ')
 
     self.surface_disc_num = int(self.options.get('surface_disc_num') or 2)
+
     self.dt = float(self.options.get('dt') or 0.0)
     self.n_steps = int(self.options.get('n_steps') or 1)
     self.n_save = int(self.options.get('n_save') or 1)

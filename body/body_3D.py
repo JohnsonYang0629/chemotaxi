@@ -1,13 +1,15 @@
 import numpy as np
 import copy
 import sys
+from read_input import read_vertex_file
+from integrator.quaternion import Quaternion
 
 
 class Body3D(object):
   '''
   Small class to handle a single body in 3D domain.
   '''
-  def __init__(self, location, v_orientation, omega_orientation, n_steps):
+  def __init__(self, location, omega_axis_orientation, structure_ref_config, n_steps):
     '''
     Constructor. Take arguments like ...
     '''
@@ -16,21 +18,83 @@ class Body3D(object):
     self.location_new = np.copy(location)
     self.location_old = np.copy(location)
     self.location_history = np.zeros([n_steps + 1, 3])
-    # Orientation using Rodrigues formula
-    self.v_orientation = copy.copy(v_orientation)
-    self.v_orientation_new = copy.copy(v_orientation)
-    self.v_orientation_old = copy.copy(v_orientation)
-    self.omega_orientation = copy.copy(omega_orientation)
-    self.omega_orientation_new = copy.copy(omega_orientation)
-    self.omega_orientation_old = copy.copy(omega_orientation)
+    # Orientation as Quaternion
+    self.omega_axis_orientation = copy.copy(omega_axis_orientation)
+    self.omega_axis_orientation_new = copy.copy(omega_axis_orientation)
+    self.omega_axis_orientation_old = copy.copy(omega_axis_orientation)
+    # v0 axis as in 3D vector
+    self.v0_axis = np.array([1.0, 0.0, 0.0])
+    self.v0_axis_new = np.array([1.0, 0.0, 0.0])
+    self.v0_axis_old = np.array([1.0, 0.0, 0.0])
     # Reference configuration. Coordinates of droplet for quaternion [1, 0, 0, 0]
     # and location = np.array[0, 0, 0]) as a np.array.shape = (1, 3)
     # Some default functions
+
+    # Load surface node positions
+    # These nodes are defined in the body's own reference frame.
+    self.nodes_body_frame = np.copy(structure_ref_config)
+    self.n_nodes = len(self.nodes_body_frame)
+
     self.function_force = self.default_none
     self.function_torque = self.default_none
     self.prescribed_velocity = np.array([0.0, 0.0, 0.0, 0.0])
     self.chem_surface_gradient = np.array([0.0, 0.0, 0.0])
     self.ID = None
+
+  def get_surface_nodes(self, location = None, omega_axis_orientation = None):
+      """
+      Calculates the positions of the surface nodes in the world frame.
+      It rotates the body-frame nodes by the current orientation and then
+      translates them to the body's current position.
+
+      Returns:
+          np.ndarray: An array of 3D vectors for each node's position in the world frame.
+      """
+
+      # Get location and orientation
+      if location is None:
+        location = self.location
+      if omega_axis_orientation is None:
+        omega_axis_orientation = self.omega_axis_orientation
+
+      # Rotate each node from body frame to world frame using the quaternion
+      rotation_matrix = omega_axis_orientation.rotation_matrix()
+      nodes_world = np.dot(self.nodes_body_frame, rotation_matrix.T)
+      # Translate nodes to the body's position
+      nodes_world += location
+      return nodes_world
+
+  def update_v0_axis_from_omega_axis(self, omega_axis_orientation = None):
+    """
+    Initially, omega_axis corresponds to z-axis, v0_axis to x-axis.
+    Re-calculates the orthogonal v_axis based on the current omega_axis.
+    This is useful for initialization.
+    """
+    if omega_axis_orientation is None:
+      omega_axis_orientation = self.omega_axis_orientation
+
+    v0_axis_init = np.array([1.0, 0.0, 0.0])
+    rotation_matrix = omega_axis_orientation.rotation_matrix()
+    v0_axis = np.dot(v0_axis_init, rotation_matrix.T)
+
+    self.v0_axis = v0_axis
+
+  def calc_rot_matrix(self, location = None, orientation = None):
+    '''
+    Calculate the matrix R, where the i-th 3x3 block of R gives
+    (R_i x) = -1 (r_i cross x).
+    R has shape (3*N_nodes, 3).
+    '''
+    r_vectors = self.get_surface_nodes(location, orientation) - (self.location if location is None else location)
+    rot_matrix = np.zeros((r_vectors.shape[0], 3, 3))
+    rot_matrix[:, 0, 1] = r_vectors[:, 2]
+    rot_matrix[:, 0, 2] = -r_vectors[:, 1]
+    rot_matrix[:, 1, 0] = -r_vectors[:, 2]
+    rot_matrix[:, 1, 2] = r_vectors[:, 0]
+    rot_matrix[:, 2, 0] = r_vectors[:, 1]
+    rot_matrix[:, 2, 1] = -r_vectors[:, 0]
+
+    return np.reshape(rot_matrix, (3*self.n_nodes, 3))
 
   def calc_prescribed_velocity(self):
       '''
