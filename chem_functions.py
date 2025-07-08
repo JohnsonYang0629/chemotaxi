@@ -467,7 +467,7 @@ def _local_part_3d_numba_analytical(n_nodes, surface_nodes, pos_t_now, pos_t_bef
 
 def get_chem_grad_3D_numba(body, peclet_number, dt, *args, **kwargs):
     """Numba-accelerated version using the analytical formula for the local part."""
-    surface_nodes = body.get_surface_nodes()
+    surface_nodes = body.get_surface_nodes(body.location, body.omega_axis_orientation)
     total_grad_C_on_nodes = np.zeros_like(surface_nodes)
     D = peclet_number ** -1
     step = kwargs.get('step')
@@ -513,7 +513,7 @@ def calc_tangential_grad_3D(body, peclet_number, dt, *args, **kwargs):
         grad_C_on_nodes = get_chem_grad_3D(body, peclet_number, dt, *args, **kwargs)
 
     # Step 2: Project the full gradient to the tangential plane
-    nodes_world = body.get_surface_nodes()
+    nodes_world = body.get_surface_nodes(body.location, body.omega_axis_orientation)
     r_vectors = nodes_world - body.location
 
     # Calculate the normal vector at each surface node.
@@ -527,5 +527,6 @@ def calc_tangential_grad_3D(body, peclet_number, dt, *args, **kwargs):
 
     # The tangential gradient is the full gradient minus its normal component.
     grad_tangential = grad_C_on_nodes - grad_normal_component
+    grad_tangential = np.sum(grad_tangential, axis=0)
 
     return grad_tangential

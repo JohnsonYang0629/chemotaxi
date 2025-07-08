@@ -63,10 +63,10 @@ class Body3D(object):
         omega_axis_orientation = self.omega_axis_orientation
 
       # Rotate each node from body frame to world frame using the quaternion
-      rotation_matrix = omega_axis_orientation.rotation_matrix()
-      nodes_world = np.dot(self.nodes_body_frame, rotation_matrix.T)
+      #rotation_matrix = omega_axis_orientation.rotation_matrix()
+      #nodes_world = np.dot(self.nodes_body_frame, rotation_matrix.T)
       # Translate nodes to the body's position
-      nodes_world += location
+      nodes_world = self.nodes_body_frame + location
       return nodes_world
 
   def update_v0_axis_from_omega_axis(self, omega_axis_orientation = None):
@@ -83,6 +83,7 @@ class Body3D(object):
     v0_axis = np.dot(v0_axis_init, rotation_matrix.T)
 
     self.v0_axis = v0_axis
+    return v0_axis
 
   def update_omega_axis(self, omega_axis_orientation = None):
     """
@@ -98,6 +99,7 @@ class Body3D(object):
     omega_axis = np.dot(omega_axis_init, rotation_matrix.T)
 
     self.omega_axis = omega_axis
+    return omega_axis
 
   def calc_rot_matrix(self, location = None, orientation = None):
     '''
