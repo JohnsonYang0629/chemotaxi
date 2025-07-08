@@ -26,6 +26,11 @@ class Body3D(object):
     self.v0_axis = np.array([1.0, 0.0, 0.0])
     self.v0_axis_new = np.array([1.0, 0.0, 0.0])
     self.v0_axis_old = np.array([1.0, 0.0, 0.0])
+
+    # omega axis as in 3D vector
+    self.omega_axis = np.array([0.0, 0.0, 1.0])
+    self.omega_axis_new = np.array([0.0, 0.0, 1.0])
+    self.omega_axis_old = np.array([0.0, 0.0, 1.0])
     # Reference configuration. Coordinates of droplet for quaternion [1, 0, 0, 0]
     # and location = np.array[0, 0, 0]) as a np.array.shape = (1, 3)
     # Some default functions
@@ -37,7 +42,7 @@ class Body3D(object):
 
     self.function_force = self.default_none
     self.function_torque = self.default_none
-    self.prescribed_velocity = np.array([0.0, 0.0, 0.0, 0.0])
+    self.prescribed_velocity = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
     self.chem_surface_gradient = np.array([0.0, 0.0, 0.0])
     self.ID = None
 
@@ -78,6 +83,21 @@ class Body3D(object):
     v0_axis = np.dot(v0_axis_init, rotation_matrix.T)
 
     self.v0_axis = v0_axis
+
+  def update_omega_axis(self, omega_axis_orientation = None):
+    """
+    Initially, omega_axis corresponds to z-axis, v0_axis to x-axis.
+    Re-calculates the orthogonal v_axis based on the current omega_axis.
+    This is useful for initialization.
+    """
+    if omega_axis_orientation is None:
+      omega_axis_orientation = self.omega_axis_orientation
+
+    omega_axis_init = np.array([0.0, 0.0, 1.0])
+    rotation_matrix = omega_axis_orientation.rotation_matrix()
+    omega_axis = np.dot(omega_axis_init, rotation_matrix.T)
+
+    self.omega_axis = omega_axis
 
   def calc_rot_matrix(self, location = None, orientation = None):
     '''

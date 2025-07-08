@@ -338,7 +338,7 @@ def get_chem_grad_3D(body, peclet_number, dt, *args, **kwargs):
     total_grad_C_on_nodes = np.zeros_like(surface_nodes)
     D = peclet_number ** -1
     step = kwargs.get('step')
-    t_now = body.counter * dt
+    t_now = step * dt
 
     # History Part (C_H): Sum over discrete steps from t=0 to t_now - dt
     if step > 1:
@@ -356,7 +356,7 @@ def get_chem_grad_3D(body, peclet_number, dt, *args, **kwargs):
                 total_grad_C_on_nodes[j] += grad_G * dt
 
     # Local Part (C_L): Analytical solution for the integral over the last time step
-    if body.counter > 0:
+    if step > 0:
         pos_t_now = body.location
         pos_t_before = body.location_history[-1]
         v_k = (pos_t_now - pos_t_before) / dt
@@ -470,8 +470,8 @@ def get_chem_grad_3D_numba(body, peclet_number, dt, *args, **kwargs):
     surface_nodes = body.get_surface_nodes()
     total_grad_C_on_nodes = np.zeros_like(surface_nodes)
     D = peclet_number ** -1
-    t_now = body.counter * dt
     step = kwargs.get('step')
+    t_now = step * dt
     n_nodes = body.n_nodes
 
     # History Part
@@ -482,7 +482,7 @@ def get_chem_grad_3D_numba(body, peclet_number, dt, *args, **kwargs):
         total_grad_C_on_nodes += grad_C_history
 
     # Local Part (Analytical)
-    if body.counter > 0:
+    if step > 0:
         pos_t_now = body.location
         pos_t_before = body.location_history[-1]
         grad_C_local = _local_part_3d_numba_analytical(n_nodes, surface_nodes, pos_t_now, pos_t_before, D, dt)
