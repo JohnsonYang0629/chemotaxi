@@ -63,7 +63,8 @@ class ChemoIntegrator3D(object):
                     omega_axis_quaternion_dt = Quaternion.from_rotation((1.5 * angular_velocity_vector -
                                                                          0.5 * self.velocities_previous_step[4:6]) * dt)
                     body.location = location_new
-                    body.omega_axis_orientation_new = omega_axis_quaternion_dt * body.omega_axis_orientation
+                    body.omega_axis_orientation = omega_axis_quaternion_dt * body.omega_axis_orientation
+                    body.v0_axis = body.update_v0_axis_from_omega_axis(body.omega_axis_orientation)
                     velocity = np.append(linear_velocity_compose, angular_velocity_vector)
                     body.prescribed_velocity = velocity
 
@@ -72,7 +73,8 @@ class ChemoIntegrator3D(object):
                     location_new = body.location + linear_velocity_compose * dt
                     omega_axis_quaternion_dt = Quaternion.from_rotation(angular_velocity_vector * dt)
                     body.location = location_new
-                    body.omega_axis_orientation_new = omega_axis_quaternion_dt * body.omega_axis_orientation
+                    body.omega_axis_orientation = omega_axis_quaternion_dt * body.omega_axis_orientation
+                    body.v0_axis = body.update_v0_axis_from_omega_axis(body.omega_axis_orientation)
                     velocity = np.append(linear_velocity_compose, angular_velocity_vector)
                     body.prescribed_velocity = velocity
 
@@ -94,9 +96,9 @@ class ChemoIntegrator3D(object):
                 omega_axis = body.update_omega_axis(body.omega_axis_orientation)
                 angular_velocity_vector = self.intrinsic_velocity[1] * omega_axis
                 omega_axis_quaternion_dt = Quaternion.from_rotation(angular_velocity_vector * dt)
-                body.omega_axis_orientation_new = omega_axis_quaternion_dt * body.omega_axis_orientation
+                body.omega_axis_orientation = omega_axis_quaternion_dt * body.omega_axis_orientation
 
-                body.v0_axis_new = body.update_v0_axis_from_omega_axis(body.omega_axis_orientation_new)
+                body.v0_axis = body.update_v0_axis_from_omega_axis(body.omega_axis_orientation)
                 velocity = np.append(linear_velocity_compose, angular_velocity_vector)
                 body.prescribed_velocity = velocity
                 body.chem_surface_gradient = chem_force
