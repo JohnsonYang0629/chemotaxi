@@ -118,6 +118,61 @@ class Body3D(object):
 
     return np.reshape(rot_matrix, (3*self.n_nodes, 3))
 
+  def get_surface_nodes(self, location = None, omega_axis_orientation = None):
+      """
+      Calculates the positions of the surface nodes in the world frame.
+      It rotates the body-frame nodes by the current orientation and then
+      translates them to the body's current position.
+
+      Returns:
+          np.ndarray: An array of 3D vectors for each node's position in the world frame.
+      """
+
+      # Get location and orientation
+      if location is None:
+        location = self.location
+      if omega_axis_orientation is None:
+        omega_axis_orientation = self.omega_axis_orientation
+
+      # Rotate each node from body frame to world frame using the quaternion
+      rotation_matrix = omega_axis_orientation.rotation_matrix()
+      nodes_world = np.dot(self.nodes_body_frame, rotation_matrix.T)
+      # Translate nodes to the body's position
+      nodes_world += location
+      return nodes_world
+
+  def update_v0_axis_from_omega_axis(self, omega_axis_orientation = None):
+    """
+    Initially, omega_axis corresponds to z-axis, v0_axis to x-axis.
+    Re-calculates the orthogonal v_axis based on the current omega_axis.
+    This is useful for initialization.
+    """
+    if omega_axis_orientation is None:
+      omega_axis_orientation = self.omega_axis_orientation
+
+    v0_axis_init = np.array([1.0, 0.0, 0.0])
+    rotation_matrix = omega_axis_orientation.rotation_matrix()
+    v0_axis = np.dot(v0_axis_init, rotation_matrix.T)
+
+    self.v0_axis = v0_axis
+
+  def calc_rot_matrix(self, location = None, orientation = None):
+    '''
+    Calculate the matrix R, where the i-th 3x3 block of R gives
+    (R_i x) = -1 (r_i cross x).
+    R has shape (3*N_nodes, 3).
+    '''
+    r_vectors = self.get_surface_nodes(location, orientation) - (self.location if location is None else location)
+    rot_matrix = np.zeros((r_vectors.shape[0], 3, 3))
+    rot_matrix[:, 0, 1] = r_vectors[:, 2]
+    rot_matrix[:, 0, 2] = -r_vectors[:, 1]
+    rot_matrix[:, 1, 0] = -r_vectors[:, 2]
+    rot_matrix[:, 1, 2] = r_vectors[:, 0]
+    rot_matrix[:, 2, 0] = r_vectors[:, 1]
+    rot_matrix[:, 2, 1] = -r_vectors[:, 0]
+
+    return np.reshape(rot_matrix, (3*self.n_nodes, 3))
+
   def calc_prescribed_velocity(self):
       '''
       Return the body prescribed velocity.
