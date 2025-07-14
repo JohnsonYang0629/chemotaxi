@@ -91,5 +91,4 @@ class ChemoIntegrator2D(object):
             self.first_step = False
             self.velocities_previous_step = velocity
 
-
             return

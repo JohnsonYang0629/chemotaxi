@@ -1,0 +1,33 @@
+# Job description
+job_name                    test_3d
+job_type                    dynamic
+domain                      3D
+scheme                      history_local_compose_3d
+acceleration                numba
+numerical_method            forward_euler
+
+# Parameters specification
+mobility_alpha              -5
+radius                      1
+intrinsic_linear_velocity   1
+intrinsic_angular_velocity  1
+emission_rate               1
+persistence_length          1
+
+peclet_number               20
+
+initial_position_3D                         0 0 0
+initial_orientation_3D_quaternion           1 0 0 0
+
+# Numerical simulation configuration
+droplet_num                                 1
+n_steps                                     2000
+dt                                          0.1
+
+# Output configuration
+output_name                                 simulation_results/chemo_3d_test
+save_clones				                    one_file
+initial_step                                0
+
+# Discretization info
+structure                                   structures/shell_N_162_Rg_1_Rh_1_0530.vertex

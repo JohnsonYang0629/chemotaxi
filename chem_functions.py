@@ -1,6 +1,10 @@
 import numpy as np
 import scipy.special as sc
 import sys
+from scipy.special import kn, k0, k1, erfc
+import math
+from scipy import integrate
+from numba import njit, prange
 from numba import jit
 import time
 try:
@@ -96,9 +100,7 @@ def calc_gradient_2d_parallel(seq, target_points_abs_loc, location_history, stru
                                                       location_history, peclet_number, step, dt)
     surface_gradient = calc_tangential_gradient_part(structure_ref_config, seq,
                                                      gradient_history_part + gradient_local_part)
-    surface_gradient_local = calc_tangential_gradient_part(structure_ref_config, seq, gradient_local_part)
-    surface_gradient_history = calc_tangential_gradient_part(structure_ref_config, seq, gradient_history_part)
-    return [surface_gradient, surface_gradient_local, surface_gradient_history]
+    return surface_gradient
 
 
 def calc_gradient_3d_parallel(seq, target_points_abs_loc, location_history, structure_ref_config, peclet_number, step, dt):
@@ -130,11 +132,9 @@ def calc_gradient_local_part_2d(target_position, history_path_location, peclet_n
     position_difference = target_position - history_path_location[step - 1, :]
     position_difference_norm_square = np.power(np.linalg.norm(position_difference), 2)
     rho = peclet_number * position_difference_norm_square/(4 * dt)
-    #gradient_local_part = 2 * peclet_number/(4 * np.pi * np.power(position_difference_norm_square, 2)) \
-    #                        * np.exp(-rho) * (np.power(rho, 2) + 2 * rho + 2) \
-    #                        * position_difference
-    gradient_local_part = 2 * peclet_number / (4 * np.pi * position_difference_norm_square) \
-                            * np.exp(-rho) * position_difference
+    gradient_local_part = 2 * peclet_number/(4 * np.pi * np.power(position_difference_norm_square, 2)) \
+                            * np.exp(-rho) * (np.power(rho, 2) + 2 * rho + 2) \
+                            * position_difference
     return gradient_local_part
 
 
@@ -162,7 +162,6 @@ def calc_tangential_gradient_part_3d(structure_ref_config, seq, gradient):
 
 
 def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, *args, **kwargs):
-    # 2D case for planar particle (a circle)
     chem_gradient = np.zeros([2])
     step = kwargs.get('step')
     location = body.location
@@ -174,8 +173,6 @@ def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, 
     # First guess
     if step == 0 and step >= 0:
         chem_gradient = np.zeros([2])
-        chem_local_part = np.zeros([2])
-        chem_history_part = np.zeros([2])
     # After initialized: second step only have
     elif step == 1 and step >= 0:
         surface_gradient_history_sum = np.zeros([2])
@@ -184,28 +181,20 @@ def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, 
             surface_gradient_history = calc_tangential_gradient_part(structure_ref_config, seq, gradient_history_part)
             surface_gradient_history_sum += surface_gradient_history
 
-        chem_gradient = 2 * np.pi / np.shape(structure_ref_config)[0] * surface_gradient_history_sum
-        chem_local_part = np.zeros([2])
-        chem_history_part = 2 * np.pi / np.shape(structure_ref_config)[0] * surface_gradient_history_sum
+        chem_gradient = 2 * np.pi/np.shape(structure_ref_config)[0] * surface_gradient_history_sum
 
     elif step >= 2 and acceleration == "numba":
         # Numba accelerated
         # Averaged calculation time/step < 0.1s for step<=10000
         surface_gradient_sum = np.zeros([2])
-        surface_gradient_local_sum = np.zeros([2])
-        surface_gradient_history_sum = np.zeros([2])
         for seq, loc in enumerate(target_points_abs_loc):
             gradient_history_part = calc_gradient_history_part_2d(loc, location_history, peclet_number, step, dt)
             gradient_local_part = calc_gradient_local_part_2d(loc, location_history, peclet_number, step, dt)
             chemical_gradient_sum = gradient_history_part + gradient_local_part
             surface_gradient = calc_tangential_gradient_part(structure_ref_config, seq, chemical_gradient_sum)
             surface_gradient_sum += surface_gradient
-            surface_gradient_local_sum += calc_tangential_gradient_part(structure_ref_config, seq, gradient_local_part)
-            surface_gradient_history_sum += calc_tangential_gradient_part(structure_ref_config, seq, gradient_history_part)
 
-        chem_gradient = 2 * np.pi / np.shape(structure_ref_config)[0] * surface_gradient_sum
-        chem_local_part = 2 * np.pi / np.shape(structure_ref_config)[0] * surface_gradient_local_sum
-        chem_history_part = 2 * np.pi / np.shape(structure_ref_config)[0] * surface_gradient_history_sum
+        chem_gradient = 2 * np.pi/np.shape(structure_ref_config)[0] * surface_gradient_sum
 
     elif step >= 2 and acceleration == "parallel":
         # Accelerated with Python built-in parallel computing method apply_async
@@ -223,19 +212,15 @@ def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, 
         process_pool.close()
         process_pool.join()
         points_gradient = [segment.get() for segment in points_gradient_results]
-        points_gradient = np.sum(np.array(points_gradient), 0)
-        chem_local_part = points_gradient[1]
-        chem_history_part = points_gradient[2]
         #elapsed_time = time.time() - start_time
         #print('parallel process time = ', elapsed_time)
-        surface_gradient_sum += points_gradient[0]
-        chem_gradient = 2 * np.pi / np.shape(structure_ref_config)[0] * surface_gradient_sum
+        surface_gradient_sum += np.sum(points_gradient, 0)
+        chem_gradient = 2 * np.pi/np.shape(structure_ref_config)[0] * surface_gradient_sum
 
-    return chem_gradient, chem_local_part, chem_history_part
+    return chem_gradient
 
 
-def calc_surface_gradient_sphere(body, peclet_number, structure_ref_config, dt, *args, **kwargs):
-    # 3D case for spherical particle
+def calc_surface_gradient_sphere_old(body, peclet_number, structure_ref_config, dt, *args, **kwargs):
     chem_gradient = np.zeros([3])
     step = kwargs.get('step')
     location = body.location
@@ -339,3 +324,211 @@ def cart2sph_vector_3d(cart_vector):
     return sph_vector
 
 
+# ==============================================================================
+# 3D Function (Using Analytical Formula for Local Part)
+# ==============================================================================
+
+def get_chem_grad_3D(body, peclet_number, dt, *args, **kwargs):
+    """
+    Calculates the 3D chemical gradient.
+    - History part: Sum over discrete time steps.
+    - Local part: Uses the analytical formula from the paper (Eq. 17).
+    """
+    surface_nodes = body.get_surface_nodes()
+    total_grad_C_on_nodes = np.zeros_like(surface_nodes)
+    D = peclet_number ** -1
+    step = kwargs.get('step')
+    t_now = step * dt
+
+    # History Part (C_H): Sum over discrete steps from t=0 to t_now - dt
+    if step > 1:
+        for i in range(step - 1):
+            t_prime = i * dt
+            tau = t_now - t_prime
+            pos_prime = body.location_history[i]
+
+            for j, r_s in enumerate(surface_nodes):
+                r_vec = r_s - pos_prime
+                r_sq = np.dot(r_vec, r_vec)
+                if tau <= 1e-12: continue
+                G = (4 * np.pi * D * tau) ** (-1.5) * np.exp(-r_sq / (4 * D * tau))
+                grad_G = -r_vec / (2 * D * tau) * G
+                total_grad_C_on_nodes[j] += grad_G * dt
+
+    # Local Part (C_L): Analytical solution for the integral over the last time step
+    if step > 0:
+        pos_t_now = body.location
+        pos_t_before = body.location_history[-1]
+        v_k = (pos_t_now - pos_t_before) / dt
+        V_sq = np.dot(v_k, v_k)
+
+        for j, r_s in enumerate(surface_nodes):
+            r_sk_vec = r_s - pos_t_now
+            R = np.linalg.norm(r_sk_vec)
+
+            if R < 1e-12: continue
+
+            # Implementation of analytical solution from Eq. 15, 16, 17
+            r_sk_hat = r_sk_vec / R
+            v_dot_r_hat = np.dot(v_k, r_sk_hat)
+            v_parallel_vec = v_dot_r_hat * r_sk_hat
+            v_perp_vec = v_k - v_parallel_vec
+            v_perp_sq = np.dot(v_perp_vec, v_perp_vec)
+
+            arg_erfc = -v_dot_r_hat / (2 * np.sqrt(D / dt))
+
+            exp_term_F = np.exp(-V_sq * dt / (4 * D))
+            exp_term_R = np.exp(-R ** 2 / (4 * D * dt))
+            F = (1 / R ** 3) * (exp_term_F * erfc(arg_erfc) - exp_term_R)
+
+            exp_term_G = np.exp(-v_perp_sq * dt / (4 * D))
+            G = (1 / R) * np.sqrt(dt / (np.pi * D)) * exp_term_G
+
+            grad_C_local = (1 / (4 * np.pi * D)) * (F * r_sk_vec + G * v_k)
+            total_grad_C_on_nodes[j] += grad_C_local
+
+    return total_grad_C_on_nodes
+
+
+# ==============================================================================
+# 3D Functions (Numba-accelerated version with Analytical Local Part)
+# ==============================================================================
+
+@njit(parallel=True, fastmath=True)
+def _history_part_3d_numba(n_nodes, surface_nodes, n_history_steps, pos_history_arr, t_now, dt, D):
+    """
+    Numba-jitted function for the history part of the gradient.
+    NOTE: This function's formula was correct. It calculates the gradient of the
+    concentration's Green's function (grad_G), not the concentration itself.
+    """
+    total_grad_C = np.zeros((n_nodes, 3))
+    for j in prange(n_nodes):
+        r_s = surface_nodes[j]
+        grad_sum = np.zeros(3)
+        for i in range(n_history_steps):
+            t_prime = i * dt
+            tau = t_now - t_prime
+            pos_prime = pos_history_arr[i]
+            r_vec = r_s - pos_prime
+            r_sq = r_vec[0] ** 2 + r_vec[1] ** 2 + r_vec[2] ** 2
+            if tau <= 1e-12: continue
+            # G is the Green's function for concentration
+            const = (4 * np.pi * D * tau)
+            G = np.power(const, -1.5) * np.exp(-r_sq / const)
+            # grad_G is the gradient of G, which is what we need
+            grad_G = -r_vec / (2 * D * tau) * G
+            grad_sum += grad_G
+        # Integration using Euler method
+        total_grad_C[j] = grad_sum * dt
+    return total_grad_C
+
+
+@njit(parallel=True, fastmath=True)
+def _local_part_3d_numba_numerical(n_nodes, surface_nodes, pos_t_now, pos_t_before, Pe, dt):
+    """
+    Numba-jitted function for the local part of the gradient, using numerical integration (Midpoint Rule).
+    This replaces the incorrect analytical formula.
+    """
+    total_grad_C_local = np.zeros((n_nodes, 3))
+    v_k = (pos_t_now - pos_t_before) / dt
+
+    # Constant factor from Auto_chemotatic-4.pdf Eq. E2 for d=3
+    # -2 / (pi^(3/2)) * (Pe/4)^(5/2) = -Pe^(2.5) / (16 * pi^(1.5))
+    const_factor = -np.power(Pe, 2.5) / (16.0 * np.power(np.pi, 1.5))
+
+    # Midpoint rule for the local integral over [t_now-dt, t_now]
+    # Time point is t_now - dt/2, so tau = t_now - t' = dt/2
+    tau_mid = 0.5 * dt
+    # Position at midpoint time, assuming constant velocity in the last step
+    r_prime_mid = pos_t_before + v_k * (0.5 * dt)
+
+    for j in prange(n_nodes):
+        r_s = surface_nodes[j]
+        r_vec = r_s - r_prime_mid
+        r_sq = r_vec[0] ** 2 + r_vec[1] ** 2 + r_vec[2] ** 2
+
+        # Integrand from Eq. E2 evaluated at the midpoint
+        integrand_val = const_factor * (r_vec / np.power(tau_mid, 2.5)) * np.exp(-r_sq * Pe / (4.0 * tau_mid))
+
+        # The integral is approximately the integrand at midpoint * interval width (dt)
+        total_grad_C_local[j] = integrand_val * dt
+
+    return total_grad_C_local
+
+
+def get_chem_grad_3D_numba(body, peclet_number, dt, *args, **kwargs):
+    """Numba-accelerated version using numerical integration for the local part."""
+    surface_nodes = body.get_surface_nodes(body.location, body.omega_axis_orientation)
+    total_grad_C_on_nodes = np.zeros_like(surface_nodes)
+    D = 1.0 / peclet_number
+    step = kwargs.get('step')
+    t_now = step * dt
+    n_nodes = body.n_nodes
+
+    # History Part
+    if step > 1:
+        # History is from t=0 to t=(step-2)*dt
+        n_history_steps = step - 1
+        pos_history_arr = np.array(body.location_history[:n_history_steps])
+        grad_C_history = _history_part_3d_numba(n_nodes, surface_nodes, n_history_steps, pos_history_arr, t_now, dt, D)
+        total_grad_C_on_nodes += grad_C_history
+
+    # Local Part (Numerical)
+    if step > 0:
+        pos_t_now = body.location
+        # The last position in history is at step-1
+        pos_t_before = body.location_history[step - 1]
+        grad_C_local = _local_part_3d_numba_numerical(n_nodes, surface_nodes, pos_t_now, pos_t_before, peclet_number,
+                                                      dt)
+        total_grad_C_on_nodes += grad_C_local
+
+    return total_grad_C_on_nodes
+
+
+def calc_tangential_grad_3D(body, peclet_number, dt, *args, **kwargs):
+    """
+    This is the main public function to get the tangential chemical gradient on the body surface.
+    It acts as a wrapper, calling the appropriate backend (SciPy or Numba) to get the
+    full 3D gradient, and then projects it to the surface to get the tangential component.
+
+    Args:
+        body (Body3D): The 3D body object.
+        sim_config (object): The simulation configuration object.
+        use_numba (bool): Flag to select the calculation backend. True for Numba, False for SciPy.
+
+    Returns:
+        np.ndarray: An array of tangential gradient vectors for each surface node.
+    """
+    # Step 1: Get the full 3D gradient using the selected backend
+    acceleration = kwargs.get('acceleration')
+    if acceleration == "numba":
+        grad_C_on_nodes = get_chem_grad_3D_numba(body, peclet_number, dt, *args, **kwargs)
+    else:
+        grad_C_on_nodes = get_chem_grad_3D(body, peclet_number, dt, *args, **kwargs)
+
+    # Step 2: Project the full gradient onto the tangential plane (∇sC)
+    # =================================================================
+    # Get the current world coordinates of the surface nodes
+    nodes_world = body.get_surface_nodes(body.location, body.omega_axis_orientation)
+
+    # Calculate normal vectors (from center to each node)
+    r_vectors = nodes_world - body.location
+    r_vectors_norm = np.linalg.norm(r_vectors, axis=1, keepdims=True)
+    # Avoid division by zero for any node at the center (theoretically shouldn't happen)
+    r_vectors_norm[r_vectors_norm < 1e-12] = 1.0
+    normals = r_vectors / r_vectors_norm
+
+    # Project ∇C onto the normal vectors to get the normal component
+    grad_dot_norm = np.sum(grad_C_on_nodes * normals, axis=1, keepdims=True)
+    grad_normal_component = grad_dot_norm * normals
+
+    # The tangential gradient is the full gradient minus its normal component
+    grad_tangential_on_nodes = grad_C_on_nodes - grad_normal_component
+
+    # Step 3: Integrate over the surface and calculate the final force (Fc)
+    # ======================================================================
+    # The surface integral is approximated by taking the mean of the tangential
+    # gradient vectors over all surface nodes.
+    mean_tangential_grad = np.mean(grad_tangential_on_nodes, axis=0)
+
+    return mean_tangential_grad

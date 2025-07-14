@@ -1,5 +1,5 @@
 import numpy as np
-
+from integrator.quaternion import Quaternion
 
 class ChemoIntegrator3D(object):
 
@@ -21,7 +21,7 @@ class ChemoIntegrator3D(object):
         self.intrinsic_velocity = np.array([0, 0])  # compact vector [v_0,omega_0]
 
         # Optional variables
-        self.calc_surface_gradient_sphere = None
+        self.calc_tangential_grad_3D = None
         self.rotation_matrix_3d = None
 
     def advance_time_step(self, dt, *args, **kwargs):
@@ -46,48 +46,60 @@ class ChemoIntegrator3D(object):
             body = self.body
             if self.first_step == False:
                 # Use history-local compose method
-                chem_force = self.calc_surface_gradient_sphere(self.body, *args, **kwargs)
+                chem_force = self.calc_tangential_grad_3D(self.body, *args, **kwargs)
                 chem_prop = self.mobility_alpha / (4 * np.pi) * chem_force
-                angular_velocity = self.intrinsic_velocity[1]  # noise required
-                # Two-step Adams-Bashforth method
-                if self.numerical_method == "adams_bashforth_2":
-                    angular_velocity_dt = (1.5 * angular_velocity - 0.5 * self.velocities_previous_step[3]) * dt \
-                                          * body.omega_orientation
-                # Forward Euler method
-                if self.numerical_method == "forward_euler":
-                    angular_velocity_dt = angular_velocity * dt * body.omega_orientation
-                v_orientation_new = np.dot(active_torque, body.v_orientation)
-                omega_orientation_new = np.dot(active_torque, body.omega_orientation)
-                body.v_orientation = v_orientation_new
-                body.omega_orientation = omega_orientation_new
-                linear_velocity_compose = v_orientation_new * self.intrinsic_velocity[0] + chem_prop
+
+                intrinsic_swim_velocity = body.v0_axis * self.intrinsic_velocity[0]
+                linear_velocity_compose = intrinsic_swim_velocity + chem_prop
+
+                omega_axis = body.update_omega_axis(body.omega_axis_orientation)
+                angular_velocity_vector = self.intrinsic_velocity[1] * omega_axis
+
                 # Two-step Adams-Bashforth method
                 if self.numerical_method == "adams_bashforth_2":
                     location_new = body.location \
                                    + (1.5 * linear_velocity_compose - 0.5 * self.velocities_previous_step[0:3]) * dt
+
+                    omega_axis_quaternion_dt = Quaternion.from_rotation((1.5 * angular_velocity_vector -
+                                                                         0.5 * self.velocities_previous_step[4:6]) * dt)
+                    body.location = location_new
+                    body.omega_axis_orientation = omega_axis_quaternion_dt * body.omega_axis_orientation
+                    body.v0_axis = body.update_v0_axis_from_omega_axis(body.omega_axis_orientation)
+                    velocity = np.append(linear_velocity_compose, angular_velocity_vector)
+                    body.prescribed_velocity = velocity
+
                 # Forward Euler method
                 if self.numerical_method == "forward_euler":
                     location_new = body.location + linear_velocity_compose * dt
-                body.location = location_new
-                velocity = np.append(linear_velocity_compose, angular_velocity)
-                body.prescribed_velocity = velocity
+                    omega_axis_quaternion_dt = Quaternion.from_rotation(angular_velocity_vector * dt)
+                    body.location = location_new
+                    body.omega_axis_orientation = omega_axis_quaternion_dt * body.omega_axis_orientation
+                    body.v0_axis = body.update_v0_axis_from_omega_axis(body.omega_axis_orientation)
+                    velocity = np.append(linear_velocity_compose, angular_velocity_vector)
+                    body.prescribed_velocity = velocity
+
                 body.chem_surface_gradient = chem_force
 
             else:
                 # Use forward Euler method for the first step
-                chem_force = self.calc_surface_gradient_sphere(self.body, *args, **kwargs)
+                chem_force = self.calc_tangential_grad_3D(self.body, *args, **kwargs)
                 chem_prop = self.mobility_alpha / (4 * np.pi) * chem_force
-                angular_velocity = self.intrinsic_velocity[1]  # noise required
-                angular_velocity_dt = angular_velocity * dt * body.omega_orientation
-                active_torque = self.rotation_matrix_3d(angular_velocity_dt)
-                v_orientation_new = np.dot(active_torque, body.v_orientation)
-                omega_orientation_new = np.dot(active_torque, body.omega_orientation)
-                body.v_orientation = v_orientation_new
-                body.omega_orientation = omega_orientation_new
-                linear_velocity_compose = v_orientation_new * self.intrinsic_velocity[0] + chem_prop
-                location_new = body.location + linear_velocity_compose * dt
-                body.location = location_new
-                velocity = np.append(linear_velocity_compose, angular_velocity)
+
+                # Update position using Euler step
+                intrinsic_swim_velocity = body.v0_axis * self.intrinsic_velocity[0]
+                linear_velocity_compose = intrinsic_swim_velocity + chem_prop
+                location_new = body.location + linear_velocity_compose * dt     # noise required
+                body.location_new = location_new
+
+                # Update orientation of omega axis and v_0 axis
+                # noise required
+                omega_axis = body.update_omega_axis(body.omega_axis_orientation)
+                angular_velocity_vector = self.intrinsic_velocity[1] * omega_axis
+                omega_axis_quaternion_dt = Quaternion.from_rotation(angular_velocity_vector * dt)
+                body.omega_axis_orientation = omega_axis_quaternion_dt * body.omega_axis_orientation
+
+                body.v0_axis = body.update_v0_axis_from_omega_axis(body.omega_axis_orientation)
+                velocity = np.append(linear_velocity_compose, angular_velocity_vector)
                 body.prescribed_velocity = velocity
                 body.chem_surface_gradient = chem_force
 
@@ -96,4 +108,4 @@ class ChemoIntegrator3D(object):
             self.first_step = False
             self.velocities_previous_step = velocity
 
-        return
+            return
