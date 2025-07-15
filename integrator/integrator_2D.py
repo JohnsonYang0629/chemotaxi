@@ -59,7 +59,7 @@ class ChemoIntegrator2D(object):
                 if self.numerical_method == "stochastic_first_order":
                     random_rotation = np.random.randn()
                     rotational_noise_term = np.sqrt(2 / self.gamma_r) * random_rotation * np.sqrt(dt)
-                    angular_velocity_dt = (angular_velocity + rotational_noise_term) * dt
+                    angular_velocity_dt = angular_velocity * dt + rotational_noise_term
 
                 orientation_new = np.dot(self.rotation_matrix_2d(angular_velocity_dt), body.orientation)
                 body.orientation = orientation_new
@@ -74,8 +74,7 @@ class ChemoIntegrator2D(object):
                 if self.numerical_method == "stochastic_first_order":
                     random_translation = np.random.randn(2)
                     translational_noise_term = np.sqrt(2 / self.gamma_t) * random_translation * np.sqrt(dt)
-                    linear_velocity_compose += translational_noise_term
-                    location_new = body.location + linear_velocity_compose * dt
+                    location_new = body.location + linear_velocity_compose * dt + translational_noise_term
 
                 body.location = location_new
                 velocity = np.append(linear_velocity_compose, angular_velocity)

@@ -84,8 +84,8 @@ class ChemoIntegrator3D(object):
                 if self.numerical_method == "stochastic_first_order":
                     random_rotation_vec_noise = np.random.randn(3)
                     stochastic_rotation_vec = np.sqrt(2 / self.gamma_r) * random_rotation_vec_noise * np.sqrt(dt)
-                    omega_axis_quaternion_dt = Quaternion.from_rotation((angular_velocity_vector +
-                                                                         stochastic_rotation_vec) * dt)
+                    omega_axis_quaternion_dt = Quaternion.from_rotation(angular_velocity_vector * dt +
+                                                                        stochastic_rotation_vec)
 
                     body.omega_axis_orientation = omega_axis_quaternion_dt * body.omega_axis_orientation
                     omega_axis = body.update_omega_axis(body.omega_axis_orientation)
@@ -94,8 +94,8 @@ class ChemoIntegrator3D(object):
                     intrinsic_swim_velocity = body.v0_axis * self.intrinsic_velocity[0]
                     random_translation = np.random.randn(3)
                     translational_noise_term = np.sqrt(2 / self.gamma_t) * random_translation * np.sqrt(dt)
-                    linear_velocity_compose = intrinsic_swim_velocity + chem_prop + translational_noise_term
-                    location_new = body.location + linear_velocity_compose * dt
+                    linear_velocity_compose = intrinsic_swim_velocity + chem_prop
+                    location_new = body.location + linear_velocity_compose * dt + translational_noise_term
                     body.location = location_new
                     velocity = np.append(linear_velocity_compose, angular_velocity_vector)
                     body.prescribed_velocity = velocity
