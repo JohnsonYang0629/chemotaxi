@@ -64,6 +64,8 @@ if __name__ == '__main__':
     integrator.peclet_number = read.peclet_number
     integrator.mobility_alpha = read.mobility_alpha
     integrator.intrinsic_velocity = intrinsic_velocity
+    integrator.gamma_r = read.gamma_r
+    integrator.gamma_t = read.gamma_t
 
     if domain == '2D':
         integrator.rotation_matrix_2d = chem_functions.rotation_matrix_2d

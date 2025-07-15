@@ -53,6 +53,8 @@ class ReadInput(object):
     self.intrinsic_angular_velocity = float(self.options.get('intrinsic_angular_velocity') or 1.0)
     self.emission_rate = float(self.options.get('emission_rate') or 1.0)
     self.persistence_length = float(self.options.get('persistence_length') or 1.0)
+    self.gamma_t = float(self.options.get('translational_noise_gamma') or 0.0)
+    self.gamma_r = float(self.options.get('rotational_noise_gamma') or 0.0)
     self.peclet_number = float(self.options.get('peclet_number') or 1.0)
 
     self.initial_position_2D = np.fromstring(self.options.get('initial_position_2D') or '0 0', sep=' ')

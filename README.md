@@ -66,44 +66,44 @@ job_name                    test_2d
 job_type                    dynamic
 domain                      2D
 scheme                      history_local_compose_2d
-acceleration                parallel
+acceleration                numba
 core                        8
-numerical_method            forward_euler
+numerical_method            stochastic_first_order
 
 # Parameters specification
-mobility_alpha              12
+mobility_alpha              4
 radius                      1
 intrinsic_linear_velocity   1
 intrinsic_angular_velocity  1
 emission_rate               1
-persistence_length          1
+translational_noise_gamma   500
+rotational_noise_gamma      500
 
-peclet_number               120
+peclet_number               40
 
-initial_position            0 0
-initial_orientation         1 0
+initial_position_2D                   0 0
+initial_orientation_2D_vector         1 0
 
 # Numerical simulation configuration
 droplet_num                 1
-n_steps                     80000
-dt                          0.00390625
+n_steps                     2000
+dt                          0.1
 
 # Output configuration
-output_name                 simulation_results/run
-save_clones				    one_file
+output_name                 simulation_results/chemo_pe_40_lambda_4_noise_500
+save_clones	            one_file
 initial_step                0
 
 # Discretization info
-structure                   structures/circle_R_1_N60.vertex
-```
+structure                   structures/circle_R_1_N60.vertex```
 
 ---
-
+```
 With this input we can run a simulation with one 2D droplet;
 see structures given to the options `structure`. To run the simulation use
 
 `
-python main.py --input-file test.txt
+python main.py --input-file test_2d.txt
 `
 
 Now, you can inspect the outputs, `ls simulation_results/run.*`. The output files are:
@@ -127,13 +127,13 @@ The format of the files is as following.
 * `acceleration` (string). Options: `numba` and `parallel`. Numba acceleration is recommended for total step <= 10000;
 parallel acceleration is recommended for EXTRA-long simulation and fine grid of the structure (or even 3D cases).
 * `core` (int (default 1)). Number of cores used for parallel processing. Only effective for the case `acceleration` used `parallel`.
-* `numerical_method` (string). Options: `forward_euler` and `adams_bashforth_2`
+* `numerical_method` (string). Options: `forward_euler`， `adams_bashforth_2` and `stochastic_first_order`.
 
 | Name | Solver type | Notes |
 | ---- | ----------- | ----- |
 | forward_euler               | Iterative    | first order accuracy            |
 | adams_bashforth_2             | Iterative    | second order accuracy           |
-| stochastic_first_order_RFD                | Iterative    | NOT implemented yet|
+| stochastic_first_order               | Iterative    |  deterministically first order accuracy |
 
 
 * `mobility_alpha` (float (default 1)): In the JCP paper and my note, we use notation $\Lambda$, which is a mobility parameter to determine
@@ -145,11 +145,12 @@ Normally we use non-dimensionlized parameter $v_0=1$.
 Normally we use non-dimensionlized parameter $\omega_0=1$.
 * `emission_rate` (float (default 1)): The emission rate of the chemical substance. 
 Normally we use non-dimensionlized parameter $Q_0=1$.
-* `persistence_length` (float (default 1))).
+* `rotational_noise_gamma` (float (default 500)): 2D cases: dθ/dt = Ω₀ + √(2/Γ) * ξ(t); 3D cases: Δθ = Ω₀ * τ̂ * Δt + √(2/Γ) * ξ(t) * √(Δt).
+* `translational_noise_gamma` (float (default 500)): drₚ/dt = p̂ + F꜀ + √(2/Γₜ) * η(t).
 * `peclet_number`(float (default 1)): $Pe = Rv_o/D$, 
 is the ratio of self-propelling rate of the droplet to diffusion rate of emitted solute.
-* `initial_position`(float (vector default 0 0)): Vector format, 2D in format $(x_0, y_0)$, 3D in format $(x_0, y_0, z_0)$
-* `initial_orientation`(float (vector default 0 0 )): Vector format, 2D in format $(R\cos\theta, R\sin\theta)$, 3D use quaternion format (NOT implemented yet).
+* `initial_position_2D`(float (vector default 0 0)) or `initial_position_3D`(float (vector default 0 0 0)): Vector format, 2D in format $(x_0, y_0)$, 3D in format $(x_0, y_0, z_0)$
+* `initial_orientation_2D_vector`(float (vector default 0 0 )) or `initial_orientation_3D_quaternion`(float (vector default 1 0 0 0 )): Vector format, 2D in format $(R\cos\theta, R\sin\theta)$; 3D use Quaternion format.
 * `droplet_num`(int (default 1)): Currently this code only support single particle cases.
 * `n_steps`(int (default 1)): Number of simulation steps.
 * `dt`(float): time step length to advance the simulation.

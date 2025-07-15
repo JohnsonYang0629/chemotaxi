@@ -19,6 +19,8 @@ class ChemoIntegrator3D(object):
         self.peclet_number = 0.0
         self.mobility_alpha = 0.0
         self.intrinsic_velocity = np.array([0, 0])  # compact vector [v_0,omega_0]
+        self.gamma_r = 0.0
+        self.gamma_t = 0.0
 
         # Optional variables
         self.calc_tangential_grad_3D = None
@@ -75,6 +77,26 @@ class ChemoIntegrator3D(object):
                     body.location = location_new
                     body.omega_axis_orientation = omega_axis_quaternion_dt * body.omega_axis_orientation
                     body.v0_axis = body.update_v0_axis_from_omega_axis(body.omega_axis_orientation)
+                    velocity = np.append(linear_velocity_compose, angular_velocity_vector)
+                    body.prescribed_velocity = velocity
+
+                # Stochastic First Order
+                if self.numerical_method == "stochastic_first_order":
+                    random_rotation_vec_noise = np.random.randn(3)
+                    stochastic_rotation_vec = np.sqrt(2 / self.gamma_r) * random_rotation_vec_noise * np.sqrt(dt)
+                    omega_axis_quaternion_dt = Quaternion.from_rotation((angular_velocity_vector +
+                                                                         stochastic_rotation_vec) * dt)
+
+                    body.omega_axis_orientation = omega_axis_quaternion_dt * body.omega_axis_orientation
+                    omega_axis = body.update_omega_axis(body.omega_axis_orientation)
+                    body.v0_axis = body.update_v0_axis_from_omega_axis(body.omega_axis_orientation)
+
+                    intrinsic_swim_velocity = body.v0_axis * self.intrinsic_velocity[0]
+                    random_translation = np.random.randn(3)
+                    translational_noise_term = np.sqrt(2 / self.gamma_t) * random_translation * np.sqrt(dt)
+                    linear_velocity_compose = intrinsic_swim_velocity + chem_prop + translational_noise_term
+                    location_new = body.location + linear_velocity_compose * dt
+                    body.location = location_new
                     velocity = np.append(linear_velocity_compose, angular_velocity_vector)
                     body.prescribed_velocity = velocity
 
