@@ -42,7 +42,8 @@ class ReadInput(object):
     self.job_name = str(self.options.get('job_name') or 'None')
     self.job_type = str(self.options.get('job_type') or 'None')
     self.domain = str(self.options.get('domain') or '2D')
-    self.scheme = str(self.options.get('scheme') or 'HLP_2D')
+    self.scheme = str(self.options.get('scheme') or 'history_local_compose_2d')
+    self.particle_type = str(self.options.get('particle_type') or 'non_janus')
     self.acceleration = str(self.options.get('acceleration') or 'numba')
     self.core = int(self.options.get('core') or 1)
     self.numerical_method = str(self.options.get('numerical_method') or 'forward_euler')
@@ -53,8 +54,8 @@ class ReadInput(object):
     self.intrinsic_angular_velocity = float(self.options.get('intrinsic_angular_velocity') or 1.0)
     self.emission_rate = float(self.options.get('emission_rate') or 1.0)
     self.persistence_length = float(self.options.get('persistence_length') or 1.0)
-    self.gamma_t = float(self.options.get('translational_noise_gamma') or 0.0)
-    self.gamma_r = float(self.options.get('rotational_noise_gamma') or 0.0)
+    self.gamma_t = float(self.options.get('translational_noise_gamma') or 500.0)
+    self.gamma_r = float(self.options.get('rotational_noise_gamma') or 500.0)
     self.peclet_number = float(self.options.get('peclet_number') or 1.0)
 
     self.initial_position_2D = np.fromstring(self.options.get('initial_position_2D') or '0 0', sep=' ')
@@ -75,11 +76,12 @@ class ReadInput(object):
     self.output_name = str(self.options.get('output_name') or 'run')
     self.save_clones = str(self.options.get('save_clones') or 'one_file')
     self.structure = str.split(str(self.options.get('structure0')))
+    self.chemical_distribution_file = str.split(str(self.options.get('chemical_distribution') or 'None'))
 
     self.initial_position_3D = np.fromstring(self.options.get('initial_position_3D') or '0 0 0', sep=' ')
     # Prepare quaternion for omega axis
     orientation_quaternion_input = np.fromstring(self.options.get('initial_orientation_3D_quaternion') or
-                                                           '1 0 0 0', sep=' ')
+                                                 '1 0 0 0', sep=' ')
     orientation = [float(orientation_quaternion_input[0]), float(orientation_quaternion_input[1]),
                    float(orientation_quaternion_input[2]), float(orientation_quaternion_input[3])]
     norm_orientation = np.linalg.norm(orientation)

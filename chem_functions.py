@@ -432,7 +432,7 @@ def _local_part_3d_numba_numerical(n_nodes, surface_nodes, pos_t_now, pos_t_befo
     total_grad_C_local = np.zeros((n_nodes, 3))
     v_k = (pos_t_now - pos_t_before) / dt
 
-    # Constant factor from Auto_chemotatic-4.pdf Eq. E2 for d=3
+    # Constant factor Eq. E2 for d=3
     # -2 / (pi^(3/2)) * (Pe/4)^(5/2) = -Pe^(2.5) / (16 * pi^(1.5))
     const_factor = -np.power(Pe, 2.5) / (16.0 * np.power(np.pi, 1.5))
 
@@ -532,3 +532,290 @@ def calc_tangential_grad_3D(body, peclet_number, dt, *args, **kwargs):
     mean_tangential_grad = np.mean(grad_tangential_on_nodes, axis=0)
 
     return mean_tangential_grad
+
+
+# ==============================================================================
+# HELPER FUNCTIONS for cases: dry point case and spherical particle case
+# ==============================================================================
+
+@njit(fastmath=True)
+def quaternion_to_rotation_matrix(q):
+    """
+    Quaternion (w, x, y, z) transform into a 3x3 rotation matrix.
+    Warning：for numba capacity，the input sequence is [x, y, z, w].
+    """
+    x, y, z, w = q[0], q[1], q[2], q[3]
+
+    # Pre-calculate squared terms
+    x2, y2, z2 = x * x, y * y, z * z
+
+    # Pre-calculate products
+    xy, xz, yz = x * y, x * z, y * z
+    wx, wy, wz = w * x, w * y, w * z
+
+    # 构建旋转矩阵
+    R = np.empty((3, 3))
+    R[0, 0] = 1.0 - 2.0 * (y2 + z2)
+    R[0, 1] = 2.0 * (xy - wz)
+    R[0, 2] = 2.0 * (xz + wy)
+
+    R[1, 0] = 2.0 * (xy + wz)
+    R[1, 1] = 1.0 - 2.0 * (x2 + z2)
+    R[1, 2] = 2.0 * (yz - wx)
+
+    R[2, 0] = 2.0 * (xz - wy)
+    R[2, 1] = 2.0 * (yz + wx)
+    R[2, 2] = 1.0 - 2.0 * (x2 + y2)
+
+    return R
+
+
+# ==============================================================================
+# Case 1：POINT CASE (Structures only translate NO rotation)
+# ==============================================================================
+
+@njit(parallel=True, fastmath=True)
+def _history_part_point_3d_numba(n_nodes, surface_nodes, n_history_steps, pos_history_arr, t_now, dt, D):
+    """
+    Calculate history part for point particle case.
+    sigma=1 distribute uniformly.
+    """
+    total_grad_C = np.zeros((n_nodes, 3))
+    for j in prange(n_nodes):
+        # r_s is position in laboratory frame
+        r_s = surface_nodes[j]
+        grad_sum = np.zeros(3)
+        for i in range(n_history_steps):
+            t_prime = i * dt
+            tau = t_now - t_prime
+            pos_prime_center = pos_history_arr[i]
+            r_vec = r_s - pos_prime_center
+            r_sq = r_vec[0] ** 2 + r_vec[1] ** 2 + r_vec[2] ** 2
+            if tau <= 1e-12: continue
+            const = (4 * np.pi * D * tau)
+            G = np.power(const, -1.5) * np.exp(-r_sq / const)
+            grad_G = -r_vec / (2 * D * tau) * G
+            grad_sum += grad_G
+        # Integration using Euler method
+        total_grad_C[j] = grad_sum * dt
+    return total_grad_C
+
+
+@njit(parallel=True, fastmath=True)
+def _local_part_point_3d_numba(n_nodes, surface_nodes, pos_t_now, pos_t_before, Pe, dt):
+    """
+    Calculate local part for point particle case.
+    """
+    total_grad_C_local = np.zeros((n_nodes, 3))
+    v_k = (pos_t_now - pos_t_before) / dt
+
+    const_factor = -np.power(Pe, 2.5) / (16.0 * np.power(np.pi, 1.5))
+    tau_mid = 0.5 * dt
+    r_prime_mid = pos_t_before + v_k * (0.5 * dt)
+
+    for j in prange(n_nodes):
+        r_s = surface_nodes[j]
+        r_vec = r_s - r_prime_mid
+        r_sq = r_vec[0] ** 2 + r_vec[1] ** 2 + r_vec[2] ** 2
+
+        integrand_val = const_factor * (r_vec / np.power(tau_mid, 2.5)) * np.exp(-r_sq * Pe / (4.0 * tau_mid))
+        total_grad_C_local[j] = integrand_val * dt
+
+    return total_grad_C_local
+
+
+def history_local_compose_3d_point(body, peclet_number, dt, *args, **kwargs):
+    """
+    Point Case: combining both local and history parts
+    Only return the chemical force.
+    """
+    surface_nodes = body.get_surface_nodes(body.location, body.omega_axis_orientation, body.is_janus)
+    total_grad_C_on_nodes = np.zeros_like(surface_nodes)
+    D = 1.0 / peclet_number
+    step = kwargs.get('step')
+    t_now = step * dt
+    n_nodes = body.n_nodes
+
+    # History Part
+    if step > 1:
+        n_history_steps = step - 1
+        pos_history_arr = np.array(body.location_history[:n_history_steps])
+        grad_C_history = _history_part_point_3d_numba(
+            n_nodes, surface_nodes, n_history_steps, pos_history_arr, t_now, dt, D)
+        total_grad_C_on_nodes += grad_C_history
+
+    # Local Part
+    if step > 0:
+        pos_t_now = body.location
+        # The last position in history is at step-1
+        pos_t_before = body.location_history[step - 1]
+        grad_C_local = _local_part_point_3d_numba(
+            n_nodes, surface_nodes, pos_t_now, pos_t_before, peclet_number, dt)
+        total_grad_C_on_nodes += grad_C_local
+
+    # 计算切向梯度和最终的力
+    normals = surface_nodes - body.location
+    normals /= np.linalg.norm(normals, axis=1)[:, np.newaxis]
+    tangential_grad = total_grad_C_on_nodes - (np.sum(total_grad_C_on_nodes * normals, axis=1))[:, np.newaxis] * normals
+    mean_tangential_grad_force = np.mean(tangential_grad, axis=0)
+
+    return mean_tangential_grad_force
+
+
+# ==============================================================================================================
+# Case 2：Spherical particle with surface chemical substance distribution (Janus particle, with body frame rotation)
+# ==============================================================================================================
+
+@njit(parallel=True, fastmath=True)
+def _history_part_dist_3d_numba(n_nodes, pos_history, orient_history, nodes_body_frame, sigma_dist, t_now, dt, D):
+    """
+    Distribution Case:
+    Calculate history part contribution,
+    With consideration of particle self rotation and distribution of chemical substance.
+    """
+    total_grad_C = np.zeros((n_nodes, 3))
+    n_history_steps = len(pos_history)
+
+    for j in prange(n_nodes):
+        # location of target node in body frame
+        target_node_body = nodes_body_frame[j]
+
+        grad_sum = np.zeros(3)
+        for i in range(n_history_steps):
+            # track particle locations and orientations from history
+            pos_center_hist = pos_history[i]
+            orient_hist = orient_history[i]
+            rot_matrix_hist = quaternion_to_rotation_matrix(orient_hist)
+
+            # calculate target node locations in lab frame
+            target_node_lab_hist = pos_center_hist + np.dot(rot_matrix_hist, target_node_body)
+
+            # contribution from all source nodes
+            for k in range(n_nodes):
+                sigma_k = 0.01 * sigma_dist[k, 0]
+                if sigma_k == 0: continue  # if not emitting chemical substance, then skip
+
+                # track source node locations and orientations from history
+                source_node_body = nodes_body_frame[k]
+                source_node_lab_hist = pos_center_hist + np.dot(rot_matrix_hist, source_node_body)
+
+                t_prime = i * dt
+                tau = t_now - t_prime
+                if tau <= 1e-12: continue
+
+                r_vec = target_node_lab_hist - source_node_lab_hist
+                r_sq = r_vec[0] ** 2 + r_vec[1] ** 2 + r_vec[2] ** 2
+
+                const = (4 * np.pi * D * tau)
+                G = np.power(const, -1.5) * np.exp(-r_sq / const)
+                grad_G = -r_vec / (2 * D * tau) * G
+
+                # contribution should be amplified by sigma_k
+                grad_sum += grad_G * sigma_k
+
+        total_grad_C[j] = grad_sum * dt
+
+    return total_grad_C
+
+
+@njit(parallel=True, fastmath=True)
+def _local_part_dist_3d_numba(n_nodes, pos_now, orient_now, pos_before, orient_before, nodes_body_frame, sigma_dist, Pe,
+                              dt):
+    """
+    Distribution Case:
+    Calculate history part contribution,
+    using mid-point rule for handling body rotation.
+    """
+    total_grad_C_local = np.zeros((n_nodes, 3))
+    D = 1.0 / Pe
+
+    # mid-point for position and orientation
+    pos_mid = (pos_now + pos_before) / 2.0
+    # nlerp is a good approximation for small dt
+    orient_mid = (orient_now + orient_before) / 2.0
+    orient_mid /= np.linalg.norm(orient_mid)
+    rot_matrix_mid = quaternion_to_rotation_matrix(orient_mid)
+
+    for j in prange(n_nodes):
+        target_node_body = nodes_body_frame[j]
+        target_node_lab_mid = pos_mid + np.dot(rot_matrix_mid, target_node_body)
+
+        grad_sum = np.zeros(3)
+        for k in range(n_nodes):
+            sigma_k = 0.01 * sigma_dist[k, 0]
+            if sigma_k == 0: continue
+
+            source_node_body = nodes_body_frame[k]
+            source_node_lab_mid = pos_mid + np.dot(rot_matrix_mid, source_node_body)
+
+            tau = 0.5 * dt
+            r_vec = target_node_lab_mid - source_node_lab_mid
+            r_sq = r_vec[0] ** 2 + r_vec[1] ** 2 + r_vec[2] ** 2
+
+            if r_sq < 1e-12: continue
+
+            const = (4 * np.pi * D * tau)
+            G = np.power(const, -1.5) * np.exp(-r_sq / const)
+            grad_G = -r_vec / (2 * D * tau) * G
+            grad_sum += grad_G * sigma_k
+
+        total_grad_C_local[j] = grad_sum * dt
+
+    return total_grad_C_local
+
+
+def history_local_compose_3d_distribution(body, peclet_number, dt, *args, **kwargs):
+    """
+    Distribution case:
+    Combining history and local parts and calculate chemical gradients for chemical force and torque.
+    RETURN:
+        chemical force, chemical torque
+    """
+    step = kwargs.get('step')
+    t_now = step * dt
+    n_nodes = body.n_nodes
+    D = 1.0 / peclet_number
+
+    nodes_body_frame = body.nodes_body_frame
+    sigma_dist = body.sigma_distribution
+
+    total_grad_C_on_nodes = np.zeros((n_nodes, 3))
+
+    # History Part
+    if step > 1:
+        n_history_steps = step - 1
+        pos_history = np.array(body.location_history[:n_history_steps])
+        orient_history = np.array(body.orientation_history[:n_history_steps])
+        grad_C_history = _history_part_dist_3d_numba(
+            n_nodes, pos_history, orient_history, nodes_body_frame, sigma_dist, t_now, dt, D)
+        total_grad_C_on_nodes += grad_C_history
+
+    # Local Part
+    if step > 0:
+        pos_now = body.location
+        orient_now = body.orientation
+        pos_before = body.location_history[step - 1]
+        orient_before = body.orientation_history[step - 1]
+        grad_C_local = _local_part_dist_3d_numba(
+            n_nodes, pos_now, orient_now, pos_before, orient_before, nodes_body_frame, sigma_dist, peclet_number, dt)
+        total_grad_C_on_nodes += grad_C_local
+
+    # Calculate chemical force and torque
+    surface_nodes = body.get_surface_nodes()
+    normals = surface_nodes - body.location
+    normals /= np.linalg.norm(normals, axis=1)[:, np.newaxis]
+
+    tangential_grad = total_grad_C_on_nodes - (np.sum(total_grad_C_on_nodes * normals, axis=1))[:, np.newaxis] * normals
+
+    # mobility should be multiplied in the integrator_3D.py
+    mean_tangential_grad_force = np.mean(tangential_grad, axis=0)
+
+    # toque is integration of r_j x F_j
+    # F_j = -mobility * tangential_grad[j]
+    # Torque_j = r_j x F_j = (nodes_body_frame[j]) x (-mobility * tangential_grad[j])
+    # mobility should be multiplied in the integrator_3D.py
+    r_vectors = nodes_body_frame
+    torque_vectors = np.cross(r_vectors, tangential_grad)
+    mean_torque = np.mean(torque_vectors, axis=0)
+
+    return mean_tangential_grad_force, mean_torque

@@ -55,6 +55,10 @@ class Quaternion(object):
     return '[ %f, %f, %f, %f ]' % (self.s, self.p[0], self.p[1], self.p[2])
 
 
+  def flip_self(self):
+    return np.array([self.p[0], self.p[1], self.p[2], self.s])
+
+
   def inverse(self):
     ''' Return the inverse quaternion.'''
     return Quaternion([self.s, -1.*self.p[0], -1.*self.p[1],

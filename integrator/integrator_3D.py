@@ -13,17 +13,19 @@ class ChemoIntegrator3D(object):
         self.numerical_method = numerical_method
 
         # Other variables
-        self.velocities = None
+        self.velocities = None  # [vx, vy, vz, wx, wy, wz]
         self.velocities_previous_step = None
         self.first_step = True
         self.peclet_number = 0.0
         self.mobility_alpha = 0.0
         self.intrinsic_velocity = np.array([0, 0])  # compact vector [v_0,omega_0]
-        self.gamma_r = 0.0
-        self.gamma_t = 0.0
+        self.gamma_r = 0.0  # Rotational diffusion
+        self.gamma_t = 0.0  # Translational diffusion
 
         # Optional variables
         self.calc_tangential_grad_3D = None
+        self.history_local_compose_3d_distribution = None
+        self.history_local_compose_3d_point = None
         self.rotation_matrix_3d = None
 
     def advance_time_step(self, dt, *args, **kwargs):
@@ -46,16 +48,29 @@ class ChemoIntegrator3D(object):
         while True:
             step = kwargs.get('step')
             body = self.body
+            force_grad = np.zeros(3)
+            chem_torque = np.zeros(3)  # Torque is zero by default
+
             if self.first_step == False:
                 # Use history-local compose method
-                chem_force = self.calc_tangential_grad_3D(self.body, *args, **kwargs)
-                chem_prop = self.mobility_alpha / (4 * np.pi) * chem_force
+                # chem_force = self.calc_tangential_grad_3D(self.body, *args, **kwargs)
+                # chem_prop = self.mobility_alpha / (4 * np.pi) * chem_force
+
+                if body.is_janus:
+                    # Distribution case: returns force and torque gradients
+                    force_grad, torque_grad = self.history_local_compose_3d_distribution(self.body, *args, **kwargs)
+                    chem_prop = (self.mobility_alpha / (4 * np.pi)) * force_grad
+                    chem_torque = (self.mobility_alpha / (4 * np.pi)) * torque_grad
+                else:
+                    # Point case: only returns a force gradient
+                    force_grad = self.history_local_compose_3d_point(self.body, *args, **kwargs)
+                    chem_prop = (self.mobility_alpha / (4 * np.pi)) * force_grad
 
                 intrinsic_swim_velocity = body.v0_axis * self.intrinsic_velocity[0]
                 linear_velocity_compose = intrinsic_swim_velocity + chem_prop
 
                 omega_axis = body.update_omega_axis(body.omega_axis_orientation)
-                angular_velocity_vector = self.intrinsic_velocity[1] * omega_axis
+                angular_velocity_vector = self.intrinsic_velocity[1] * omega_axis + chem_torque
 
                 # Two-step Adams-Bashforth method
                 if self.numerical_method == "adams_bashforth_2":
@@ -100,12 +115,23 @@ class ChemoIntegrator3D(object):
                     velocity = np.append(linear_velocity_compose, angular_velocity_vector)
                     body.prescribed_velocity = velocity
 
-                body.chem_surface_gradient = chem_force
+                body.chem_surface_gradient = force_grad
+                body.chem_torque_gradient = torque_grad
 
             else:
                 # Use forward Euler method for the first step
-                chem_force = self.calc_tangential_grad_3D(self.body, *args, **kwargs)
-                chem_prop = self.mobility_alpha / (4 * np.pi) * chem_force
+                # chem_force = self.calc_tangential_grad_3D(self.body, *args, **kwargs)
+                # chem_prop = self.mobility_alpha / (4 * np.pi) * chem_force
+
+                if body.is_janus:
+                    # Distribution case: returns force and torque gradients
+                    force_grad, torque_grad = self.history_local_compose_3d_distribution(self.body, *args, **kwargs)
+                    chem_prop = (self.mobility_alpha / (4 * np.pi)) * force_grad
+                    chem_torque = (self.mobility_alpha / (4 * np.pi)) * torque_grad
+                else:
+                    # Point case: only returns a force gradient
+                    force_grad = self.history_local_compose_3d_point(self.body, *args, **kwargs)
+                    chem_prop = (self.mobility_alpha / (4 * np.pi)) * force_grad
 
                 # Update position using Euler step
                 intrinsic_swim_velocity = body.v0_axis * self.intrinsic_velocity[0]
@@ -116,17 +142,20 @@ class ChemoIntegrator3D(object):
                 # Update orientation of omega axis and v_0 axis
                 # noise required
                 omega_axis = body.update_omega_axis(body.omega_axis_orientation)
-                angular_velocity_vector = self.intrinsic_velocity[1] * omega_axis
+                angular_velocity_vector = self.intrinsic_velocity[1] * omega_axis + chem_torque
                 omega_axis_quaternion_dt = Quaternion.from_rotation(angular_velocity_vector * dt)
                 body.omega_axis_orientation = omega_axis_quaternion_dt * body.omega_axis_orientation
 
                 body.v0_axis = body.update_v0_axis_from_omega_axis(body.omega_axis_orientation)
                 velocity = np.append(linear_velocity_compose, angular_velocity_vector)
                 body.prescribed_velocity = velocity
-                body.chem_surface_gradient = chem_force
+                body.chem_surface_gradient = force_grad
+                body.chem_torque_gradient = torque_grad
 
             # Update configuration
             body.location_history[step + 1, :] = location_new
+            body.orientation = body.omega_axis_orientation.flip_self()
+            body.orientation_history[step + 1, :] = body.omega_axis_orientation.flip_self()
             self.first_step = False
             self.velocities_previous_step = velocity
 

@@ -9,6 +9,7 @@ import time
 # Find project functions
 from read_input import read_input
 from read_input import read_vertex_file
+from read_input import read_chem_dist_file
 from body import body_2D
 from body import body_3D
 from integrator.integrator_2D import ChemoIntegrator2D
@@ -56,7 +57,13 @@ if __name__ == '__main__':
         initial_omega_axis_orientations_3D = read.initial_orientation_3D_quaternion
         body = body_3D.Body3D(initial_struct_location_3D, initial_omega_axis_orientations_3D, structure_ref_config, n_steps)
         body.location_history[0, :] = initial_struct_location_3D
+        body.orientation_history[0, :] = initial_omega_axis_orientations_3D.flip_self()
+        body.orientation = initial_omega_axis_orientations_3D.flip_self()
         integrator = ChemoIntegrator3D(body, scheme, domain, numerical_method)
+        chemical_dist_file = read.chemical_distribution_file
+        sigma_values = read_chem_dist_file.read_chemical_distribution_file(chemical_dist_file[0])
+        body.set_sigma_distribution(sigma_values)
+
     else:
         print('Domain should use \"2D\" or \"3D\". \n')
         exit()
@@ -76,12 +83,27 @@ if __name__ == '__main__':
                                                           structure_ref_config=structure_ref_config,
                                                           dt=dt)
     elif domain == '3D':
-        integrator.calc_tangential_grad_3D = partial(chem_functions.calc_tangential_grad_3D,
-                                                     acceleration=read.acceleration,
-                                                     core=read.core,
-                                                     peclet_number=read.peclet_number,
-                                                     structure_ref_config=structure_ref_config,
-                                                     dt=dt)
+        if read.particle_type == 'non_janus':
+            integrator.history_local_compose_3d_point = partial(chem_functions.history_local_compose_3d_point,
+                                                                acceleration=read.acceleration,
+                                                                core=read.core,
+                                                                peclet_number=read.peclet_number,
+                                                                structure_ref_config=structure_ref_config,
+                                                                dt=dt)
+        elif read.particle_type == 'janus':
+            integrator.history_local_compose_3d_distribution = partial(chem_functions.history_local_compose_3d_distribution,
+                                                                       acceleration=read.acceleration,
+                                                                       core=read.core,
+                                                                       peclet_number=read.peclet_number,
+                                                                       structure_ref_config=structure_ref_config,
+                                                                       dt=dt)
+        elif read.particle_type == 'default':
+            integrator.calc_tangential_grad_3D = partial(chem_functions.calc_tangential_grad_3D,
+                                                         acceleration=read.acceleration,
+                                                         core=read.core,
+                                                         peclet_number=read.peclet_number,
+                                                         structure_ref_config=structure_ref_config,
+                                                         dt=dt)
 
     # Loop over time steps
     start_time = time.time()
@@ -110,16 +132,25 @@ if __name__ == '__main__':
                 chem_force_file.write('%s %s\n' % (body.chem_surface_gradient[0], body.chem_surface_gradient[1]))
                 time_log_file.write(str(elapsed_time) + '\n')
             elif domain == '3D':
-                loc_file.write('%s %s %s\n' % (body.location[0], body.location[1], body.location[2]))
+                loc_file.write('%s %s %s %s %s %s %s\n' % (body.location[0],
+                                                           body.location[1],
+                                                           body.location[2],
+                                                           body.orientation[3],
+                                                           body.orientation[0],
+                                                           body.orientation[1],
+                                                           body.orientation[2]))
                 velocity_file.write('%s %s %s %s %s %s\n' % (body.prescribed_velocity[0],
                                                              body.prescribed_velocity[1],
                                                              body.prescribed_velocity[2],
                                                              body.prescribed_velocity[3],
                                                              body.prescribed_velocity[4],
                                                              body.prescribed_velocity[5]))
-                chem_force_file.write('%s %s %s\n' % (body.chem_surface_gradient[0],
-                                                      body.chem_surface_gradient[1],
-                                                      body.chem_surface_gradient[2]))
+                chem_force_file.write('%s %s %s %s %s %s\n' % (body.chem_surface_gradient[0],
+                                                               body.chem_surface_gradient[1],
+                                                               body.chem_surface_gradient[2],
+                                                               body.chem_torque_gradient[0],
+                                                               body.chem_torque_gradient[1],
+                                                               body.chem_torque_gradient[2]))
                 time_log_file.write(str(elapsed_time) + '\n')
 
         integrator.advance_time_step(dt, step=step)
@@ -136,16 +167,25 @@ if __name__ == '__main__':
             chem_force_file.write('%s %s\n' % (body.chem_surface_gradient[0], body.chem_surface_gradient[1]))
             time_log_file.write(str(elapsed_time) + '\n')
         elif domain == '3D':
-            loc_file.write('%s %s %s\n' % (body.location[0], body.location[1], body.location[2]))
+            loc_file.write('%s %s %s %s %s %s %s\n' % (body.location[0],
+                                                       body.location[1],
+                                                       body.location[2],
+                                                       body.orientation[3],
+                                                       body.orientation[0],
+                                                       body.orientation[1],
+                                                       body.orientation[2]))
             velocity_file.write('%s %s %s %s %s %s\n' % (body.prescribed_velocity[0],
                                                          body.prescribed_velocity[1],
                                                          body.prescribed_velocity[2],
                                                          body.prescribed_velocity[3],
                                                          body.prescribed_velocity[4],
                                                          body.prescribed_velocity[5]))
-            chem_force_file.write('%s %s %s\n' % (body.chem_surface_gradient[0],
-                                                  body.chem_surface_gradient[1],
-                                                  body.chem_surface_gradient[2]))
+            chem_force_file.write('%s %s %s %s %s %s\n' % (body.chem_surface_gradient[0],
+                                                           body.chem_surface_gradient[1],
+                                                           body.chem_surface_gradient[2],
+                                                           body.chem_torque_gradient[0],
+                                                           body.chem_torque_gradient[1],
+                                                           body.chem_torque_gradient[2]))
             time_log_file.write(str(elapsed_time) + '\n')
 
     with open(output_name + '.time', 'w') as f:

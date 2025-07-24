@@ -49,6 +49,18 @@ vector_location_body_1 quaternion_body_1
 .
 .
 ```
+Chemical substance distributions on the spherical droplet surface are given by the `*.chem_dist.dat` files. 
+Each line in these files represents the chemical substance emitting rate for the corresponding line in the `*.vertex` files
+for node positions.
+```
+1
+1
+0
+0
+.
+.
+.
+```
 
 ## 3. Run dynamic simulations
 Here, we explain how to use the main
@@ -56,7 +68,7 @@ code which allows to run deterministic and stochastic simulations for droplet in
 
 First, create a directory to store your simulation data, like `simulation_results`;
 Then inspect the input file
-`test.txt`:
+`test_2d.txt`:
 
 ---
 
@@ -106,15 +118,15 @@ see structures given to the options `structure`. To run the simulation use
 python main.py --input-file test_2d.txt
 `
 
-Now, you can inspect the outputs, `ls simulation_results/run.*`. The output files are:
+Now, you can inspect the outputs, `ls simulation_results/outputname.*`. The output files are:
 
-* `.config`: For each time step saved the
-code saves a file with the location of the droplet. The name format is (output_name + time_step + .config)
-The format of the files is the same that in the input .config files.
+* `.config`: For each time step saved the code saves a file with the location 
+(and quaternion for 3D cases) of the droplet.
 
-* `.chemforce.dat`: For each time step saved the
-code saves a file with the chemical force applied to the droplet. The name format is (output_name + time_step + .chemforce.dat)
-The format of the files is as following.
+* `.velocity.dat`: For each time step saved the code saves a file with the velocity of the droplet. 
+
+* `.chemforce.dat`: For each time step saved the code saves a file with the chemical force 
+* (chemcial torque for 3D cases) applied to the droplet. 
 
 * `.inputfile`: a copy of the input file.
 
@@ -122,10 +134,11 @@ The format of the files is as following.
 * `.time.log`: the wall-clock time elapsed per step (in seconds).
 
 **List of options for the input file:**
-* `domain` (string). Options: `2D` and `3D`. 3D codes are not updated, try 2D first.
-* `scheme` (string). Option: `history_local_compose_2d`. (No effects on codes now)
+* `domain` (string). Options: `2D` and `3D`. 
+* `scheme` (string). Option: `history_local_compose_2d` and `history_local_compose_3d`.
+* `particle_type` (string). Option for 3D: `non_janus` and `janus`.
 * `acceleration` (string). Options: `numba` and `parallel`. Numba acceleration is recommended for total step <= 10000;
-parallel acceleration is recommended for EXTRA-long simulation and fine grid of the structure (or even 3D cases).
+Parallel acceleration is recommended for EXTRA-long simulation and fine grid of the structure (or even 3D cases).
 * `core` (int (default 1)). Number of cores used for parallel processing. Only effective for the case `acceleration` used `parallel`.
 * `numerical_method` (string). Options: `forward_euler`， `adams_bashforth_2` and `stochastic_first_order`.
 
@@ -164,6 +177,7 @@ If `initial_step > 0` the code will run from time step `initial_step` to
 `n_steps`. Also, the code will try to load `.config` files with the name
 (output_name + structure_name + initial_step + .config). (This restart function has NOT implemented yet).
 * `structure`(string): The file path under main directory and file name of the discretized surface points `.vertex` file.
+* `chemical_distribution`(string): The file path under main directory and file name of the chemical substance distribution `.chem_dist.dat` file.
 
 ## 4. Software organization
 * **body/**: it contains a class to handle a single droplet body. `body_2D.py` for 2D cases and `body_3D.py` for 

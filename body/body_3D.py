@@ -33,20 +33,35 @@ class Body3D(object):
     self.omega_axis_old = np.array([0.0, 0.0, 1.0])
     # Reference configuration. Coordinates of droplet for quaternion [1, 0, 0, 0]
     # and location = np.array[0, 0, 0]) as a np.array.shape = (1, 3)
-    # Some default functions
+    self.orientation = np.zeros((1, 4))
+    self.orientation_history = np.zeros((n_steps + 1, 4))
 
     # Load surface node positions
     # These nodes are defined in the body's own reference frame.
     self.nodes_body_frame = np.copy(structure_ref_config)
     self.n_nodes = len(self.nodes_body_frame)
 
+    # Particle surface chemical substance distribution
+    self.sigma_distribution = np.ones((self.n_nodes, 1))
+    self.is_janus = False
+
     self.function_force = self.default_none
     self.function_torque = self.default_none
     self.prescribed_velocity = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
     self.chem_surface_gradient = np.array([0.0, 0.0, 0.0])
+    self.chem_torque_gradient = np.array([0.0, 0.0, 0.0])
     self.ID = None
 
-  def get_surface_nodes(self, location = None, omega_axis_orientation = None):
+  def set_sigma_distribution(self, sigma_values):
+    if sigma_values is not None and len(sigma_values) == self.n_nodes:
+      self.sigma_distribution = sigma_values
+      # Check whether sigma values are identical，if not, then it is janus particle
+      if not np.all(self.sigma_distribution == self.sigma_distribution[0]):
+        self.is_janus = True
+    else:
+      self.is_janus = False
+
+  def get_surface_nodes(self, location = None, omega_axis_orientation = None, is_janus = False):
       """
       Calculates the positions of the surface nodes in the world frame.
       It rotates the body-frame nodes by the current orientation and then
@@ -62,11 +77,16 @@ class Body3D(object):
       if omega_axis_orientation is None:
         omega_axis_orientation = self.omega_axis_orientation
 
-      # Rotate each node from body frame to world frame using the quaternion
-      #rotation_matrix = omega_axis_orientation.rotation_matrix()
-      #nodes_world = np.dot(self.nodes_body_frame, rotation_matrix.T)
-      # Translate nodes to the body's position
-      nodes_world = self.nodes_body_frame + location
+      if is_janus:
+        # Rotate each node from body frame to world frame using the quaternion
+        rotation_matrix = omega_axis_orientation.rotation_matrix()
+        rotated_nodes = np.dot(self.nodes_body_frame, rotation_matrix.T)
+        # Translate rotated nodes to the body's position
+        nodes_world = rotated_nodes + location
+      else:
+        # Translate original nodes to the body's position
+        nodes_world = self.nodes_body_frame + location
+
       return nodes_world
 
   def update_v0_axis_from_omega_axis(self, omega_axis_orientation = None):
