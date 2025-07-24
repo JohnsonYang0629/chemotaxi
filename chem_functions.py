@@ -665,56 +665,60 @@ def history_local_compose_3d_point(body, peclet_number, dt, *args, **kwargs):
 # ==============================================================================================================
 # Case 2：Spherical particle with surface chemical substance distribution (Janus particle, with body frame rotation)
 # ==============================================================================================================
+@njit(parallel=True, fastmath=True)
+def _precompute_rotated_nodes(n_history_steps, n_nodes, pos_history, orient_history, nodes_body_frame):
+    """
+    Precompute rotated node positions for history time steps
+    """
+    rotated_nodes_history = np.empty((n_history_steps, n_nodes, 3))
+    for i in prange(n_history_steps):
+        pos_center_hist = pos_history[i]
+        orient_hist = orient_history[i]
+        rot_matrix_hist = quaternion_to_rotation_matrix(orient_hist)
+        rotated_nodes_history[i, :, :] = pos_center_hist + np.dot(nodes_body_frame, rot_matrix_hist.T)
+    return rotated_nodes_history
+
 
 @njit(parallel=True, fastmath=True)
-def _history_part_dist_3d_numba(n_nodes, pos_history, orient_history, nodes_body_frame, sigma_dist, t_now, dt, D):
+def _history_part_dist_3d_numba_optimized(n_nodes, rotated_nodes_history, sigma_dist, t_now, dt, D):
     """
     Distribution Case:
     Calculate history part contribution,
-    With consideration of particle self rotation and distribution of chemical substance.
+    with consideration of particle self rotation and distribution of chemical substance.
+    Optimized with precompute_rotated_nodes.
     """
     total_grad_C = np.zeros((n_nodes, 3))
-    n_history_steps = len(pos_history)
+    n_history_steps = rotated_nodes_history.shape[0]
+
+    sigma_dist_scaled = sigma_dist.reshape(-1, 1)
 
     for j in prange(n_nodes):
         # location of target node in body frame
-        target_node_body = nodes_body_frame[j]
-
+        target_node_lab_hist_all_steps = rotated_nodes_history[:, j, :]
         grad_sum = np.zeros(3)
+
         for i in range(n_history_steps):
-            # track particle locations and orientations from history
-            pos_center_hist = pos_history[i]
-            orient_hist = orient_history[i]
-            rot_matrix_hist = quaternion_to_rotation_matrix(orient_hist)
+            target_node_lab_hist = target_node_lab_hist_all_steps[i]
+            # Retrieve all source nodes positions in history
+            source_nodes_lab_hist = rotated_nodes_history[i, :, :]
 
-            # calculate target node locations in lab frame
-            target_node_lab_hist = pos_center_hist + np.dot(rot_matrix_hist, target_node_body)
+            # Vectorized computation: vector distance and distance square for all source nodes to target nodes
+            r_vec_all_sources = target_node_lab_hist - source_nodes_lab_hist
+            r_sq_all_sources = np.sum(r_vec_all_sources**2, axis=1)
 
-            # contribution from all source nodes
-            for k in range(n_nodes):
-                sigma_k = 0.01 * sigma_dist[k, 0]
-                if sigma_k == 0: continue  # if not emitting chemical substance, then skip
+            t_prime = i * dt
+            tau = t_now - t_prime
 
-                # track source node locations and orientations from history
-                source_node_body = nodes_body_frame[k]
-                source_node_lab_hist = pos_center_hist + np.dot(rot_matrix_hist, source_node_body)
-
-                t_prime = i * dt
-                tau = t_now - t_prime
-                if tau <= 1e-12: continue
-
-                r_vec = target_node_lab_hist - source_node_lab_hist
-                r_sq = r_vec[0] ** 2 + r_vec[1] ** 2 + r_vec[2] ** 2
-
+            if tau > 1e-12:
                 const = (4 * np.pi * D * tau)
-                G = np.power(const, -1.5) * np.exp(-r_sq / const)
-                grad_G = -r_vec / (2 * D * tau) * G
+                G_all_sources = np.power(const, -1.5) * np.exp(-r_sq_all_sources / const)
+                grad_G_all_sources = (-r_vec_all_sources / (2 * D * tau)) * G_all_sources.reshape(-1, 1)
 
-                # contribution should be amplified by sigma_k
-                grad_sum += grad_G * sigma_k
+                # Vectorized computation: gradient multiplied by sigma value
+                weighted_grads = grad_G_all_sources * sigma_dist_scaled
+                grad_sum += np.sum(weighted_grads, axis=0)
 
         total_grad_C[j] = grad_sum * dt
-
     return total_grad_C
 
 
@@ -742,7 +746,7 @@ def _local_part_dist_3d_numba(n_nodes, pos_now, orient_now, pos_before, orient_b
 
         grad_sum = np.zeros(3)
         for k in range(n_nodes):
-            sigma_k = 0.01 * sigma_dist[k, 0]
+            sigma_k = sigma_dist[k]
             if sigma_k == 0: continue
 
             source_node_body = nodes_body_frame[k]
@@ -760,6 +764,53 @@ def _local_part_dist_3d_numba(n_nodes, pos_now, orient_now, pos_before, orient_b
             grad_sum += grad_G * sigma_k
 
         total_grad_C_local[j] = grad_sum * dt
+
+    return total_grad_C_local
+
+
+@njit(parallel=True, fastmath=True)
+def _local_part_dist_3d_numba_optimized(n_nodes, pos_now, orient_now, pos_before, orient_before, nodes_body_frame,
+                                        sigma_dist, Pe, dt):
+    """
+    Local Part: vectorized version for optimized computation time
+    """
+    total_grad_C_local = np.zeros((n_nodes, 3))
+    D = 1.0 / Pe
+
+    # mid position and orientation for mid-point rule (CoM)
+    pos_mid = (pos_now + pos_before) / 2.0
+    orient_mid = (orient_now + orient_before) / 2.0
+    orient_mid /= np.linalg.norm(orient_mid)
+    rot_matrix_mid = quaternion_to_rotation_matrix(orient_mid)
+
+    # mid position and orientation for all nodes
+    nodes_lab_mid = pos_mid + np.dot(nodes_body_frame, rot_matrix_mid.T)
+
+    # sigma_dist is a (n_nodes,) 1d array
+    sigma_dist_scaled = sigma_dist.reshape(-1, 1)
+
+    tau = 0.5 * dt
+    const = (4 * np.pi * D * tau)
+
+    for j in prange(n_nodes):
+        target_node_lab_mid = nodes_lab_mid[j]
+
+        # Vectorized computations: vec distance and distance square for all source nodes to target nodes.
+        r_vecs = target_node_lab_mid - nodes_lab_mid
+        r_sqs = np.sum(r_vecs ** 2, axis=1)
+
+        # Calculate Greens' function and its gradient for all source nodes.
+        # avoiding dividing by zero when it is too close.
+        valid_indices = r_sqs > 1e-12
+
+        G = np.zeros(n_nodes)
+        G[valid_indices] = np.power(const, -1.5) * np.exp(-r_sqs[valid_indices] / const)
+
+        grad_G = -r_vecs / (2 * D * tau) * G.reshape(-1, 1)
+
+        # gradient multiplied by sigma value.
+        weighted_grad_sum = np.sum(grad_G * sigma_dist_scaled, axis=0)
+        total_grad_C_local[j] = weighted_grad_sum * dt
 
     return total_grad_C_local
 
@@ -786,8 +837,14 @@ def history_local_compose_3d_distribution(body, peclet_number, dt, *args, **kwar
         n_history_steps = step - 1
         pos_history = np.array(body.location_history[:n_history_steps])
         orient_history = np.array(body.orientation_history[:n_history_steps])
-        grad_C_history = _history_part_dist_3d_numba(
-            n_nodes, pos_history, orient_history, nodes_body_frame, sigma_dist, t_now, dt, D)
+
+        # Call helper function to precompute all nodes
+        rotated_nodes_history = _precompute_rotated_nodes(n_history_steps, n_nodes, pos_history, orient_history,
+                                                          nodes_body_frame)
+
+        # Call optimized history part function
+        grad_C_history = _history_part_dist_3d_numba_optimized(
+            n_nodes, rotated_nodes_history, sigma_dist, t_now, dt, D)
         total_grad_C_on_nodes += grad_C_history
 
     # Local Part
@@ -796,7 +853,9 @@ def history_local_compose_3d_distribution(body, peclet_number, dt, *args, **kwar
         orient_now = body.orientation
         pos_before = body.location_history[step - 1]
         orient_before = body.orientation_history[step - 1]
-        grad_C_local = _local_part_dist_3d_numba(
+
+        # Call optimized local part function
+        grad_C_local = _local_part_dist_3d_numba_optimized(
             n_nodes, pos_now, orient_now, pos_before, orient_before, nodes_body_frame, sigma_dist, peclet_number, dt)
         total_grad_C_on_nodes += grad_C_local
 

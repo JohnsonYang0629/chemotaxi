@@ -42,7 +42,7 @@ class Body3D(object):
     self.n_nodes = len(self.nodes_body_frame)
 
     # Particle surface chemical substance distribution
-    self.sigma_distribution = np.ones((self.n_nodes, 1))
+    self.sigma_distribution = np.ones(self.n_nodes) / self.n_nodes
     self.is_janus = False
 
     self.function_force = self.default_none
@@ -53,11 +53,34 @@ class Body3D(object):
     self.ID = None
 
   def set_sigma_distribution(self, sigma_values):
-    if sigma_values is not None and len(sigma_values) == self.n_nodes:
-      self.sigma_distribution = sigma_values
-      # Check whether sigma values are identical，if not, then it is janus particle
-      if not np.all(self.sigma_distribution == self.sigma_distribution[0]):
-        self.is_janus = True
+    """
+    Set and normalize sigma disribution
+    Args:
+        sigma_values (list or np.ndarray): each node's corresponding sigma value.
+    """
+    # 1. check the length of sigma value is identical to the nodes.
+    if sigma_values is None or len(sigma_values) != self.n_nodes:
+      print("Warning: Input sigma_values invalid，default uniform distribution will be used.")
+      # if costume distribution invalid, we use non-Janus particle.
+      self.sigma_distribution = np.ones(self.n_nodes) / self.n_nodes
+      self.is_janus = False
+      return
+
+    # 2. normalize with the sum of total sigma
+    sigma_values = np.asarray(sigma_values, dtype=float)
+    total_sigma = np.sum(sigma_values)
+
+    # 3. normalization
+    #    avoid divide by zero
+    if total_sigma > 1e-12:
+      self.sigma_distribution = sigma_values / total_sigma
+    else:
+      # if sigma is zero everywhere
+      self.sigma_distribution = np.zeros(self.n_nodes)
+
+    # 4. Update Janus particle type
+    if not np.allclose(self.sigma_distribution, self.sigma_distribution[0]):
+      self.is_janus = True
     else:
       self.is_janus = False
 
