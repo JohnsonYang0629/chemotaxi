@@ -49,6 +49,7 @@ class ChemoIntegrator3D(object):
             step = kwargs.get('step')
             body = self.body
             force_grad = np.zeros(3)
+            torque_grad = np.zeros(3)  # Torque is zero by default
             chem_torque = np.zeros(3)  # Torque is zero by default
 
             if self.first_step == False:
