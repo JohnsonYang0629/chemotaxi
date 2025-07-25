@@ -189,3 +189,10 @@ the schemes to integrate the equations of motion.
 * **tools/**: start-up useful tools (NOT necessary).
 * **main.py**: it calls, processes and advances for simulations.
 * **chem_functions.py**: it calculates related chemical gradient forces (to be called).
+
+## 5. Notes
+* Control MKL's Threading: To run the simulation by forcing MKL to run in single-threaded mode, 
+letting Numba handle all the high-level parallelization with `prange`:
+`
+MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 OMP_NUM_THREADS=1 python main.py --input-file test_3d.txt
+`
