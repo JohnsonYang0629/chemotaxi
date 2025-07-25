@@ -5,6 +5,7 @@ import numpy as np
 from shutil import copyfile
 from functools import partial
 import time
+import pickle
 
 # Find project functions
 from read_input import read_input
@@ -44,6 +45,34 @@ if __name__ == '__main__':
 
     structure_file_name = read.structure
     structure_ref_config = read_vertex_file.read_vertex_file(structure_file_name[0])
+
+    if read.random_state != 'None':
+        random_state_file = read.random_state
+        print(f"Attempting to load random state from: {random_state_file}")
+        try:
+            with open(random_state_file, 'rb') as f:
+                # load random state from file
+                state = pickle.load(f)
+                # apply random state to numpy
+                np.random.set_state(state)
+            print(f"Successfully loaded random state from '{random_state_file}'.")
+        except FileNotFoundError:
+            print(f"ERROR: The specified random_state file '{random_state_file}' was not found.")
+            exit(1)
+        except Exception as e:
+            print(f"ERROR: An error occurred while loading the random state: {e}")
+            exit(1)
+
+    if read.numerical_method == "stochastic_first_order":
+        output_state_filename = f"{read.output_name}.random_state"
+        print(f"Saving the initial random state for this run to '{output_state_filename}'.")
+        try:
+            # get and write current numpy random state
+            current_state = np.random.get_state()
+            with open(output_state_filename, 'wb') as f:
+                pickle.dump(current_state, f)
+        except IOError as e:
+            print(f"ERROR: Could not save the random state to '{output_state_filename}': {e}")
 
     # Create droplet body
     if domain == '2D':

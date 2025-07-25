@@ -132,6 +132,7 @@ Now, you can inspect the outputs, `ls simulation_results/outputname.*`. The outp
 
 * `.time`: the wall-clock time elapsed during the simulation (in seconds).
 * `.time.log`: the wall-clock time elapsed per step (in seconds).
+* `.random_state`: the file with the state of the random generator from current simulation.
 
 **List of options for the input file:**
 * `domain` (string). Options: `2D` and `3D`. 
@@ -178,6 +179,7 @@ If `initial_step > 0` the code will run from time step `initial_step` to
 (output_name + structure_name + initial_step + .config). (This restart function has NOT implemented yet).
 * `structure`(string): The file path under main directory and file name of the discretized surface points `.vertex` file.
 * `chemical_distribution`(string): The file path under main directory and file name of the chemical substance distribution `.chem_dist.dat` file.
+* `random_state` (string): name of a file with the state of the random generator from a previous simulation. It can be used to generate the same random numbers in different simulations.
 
 ## 4. Software organization
 * **body/**: it contains a class to handle a single droplet body. `body_2D.py` for 2D cases and `body_3D.py` for 

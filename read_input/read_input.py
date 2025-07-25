@@ -77,6 +77,7 @@ class ReadInput(object):
     self.save_clones = str(self.options.get('save_clones') or 'one_file')
     self.structure = str.split(str(self.options.get('structure0')))
     self.chemical_distribution_file = str.split(str(self.options.get('chemical_distribution') or 'None'))
+    self.random_state = str(self.options.get('random_state') or 'None')
 
     self.initial_position_3D = np.fromstring(self.options.get('initial_position_3D') or '0 0 0', sep=' ')
     # Prepare quaternion for omega axis
