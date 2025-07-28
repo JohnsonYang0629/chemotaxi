@@ -3,12 +3,12 @@ job_name                    test_3d
 job_type                    dynamic
 domain                      3D
 scheme                      history_local_compose_3d
-particle_type               janus
+particle_type               non_janus
 acceleration                numba
 numerical_method            stochastic_first_order
 
 # Parameters specification
-mobility_alpha              -1
+mobility_alpha              -5
 radius                      1
 intrinsic_linear_velocity   1
 intrinsic_angular_velocity  1
@@ -23,14 +23,14 @@ initial_orientation_3D_quaternion           1 0 0 0
 
 # Numerical simulation configuration
 droplet_num                                 1
-n_steps                                     100
+n_steps                                     2000
 dt                                          0.1
 
 # Output configuration
-output_name                                 simulation_results/janus_pe_20_lambda_1_noise_500_rescaled_sigma_test
+output_name                                 simulation_results/nonjanus_3d_pe_20_lambda_5_noise
 save_clones				                    one_file
 initial_step                                0
 
 # Discretization info
-structure                                   structures/shell_N_162_Rg_1_Rh_1_0530.vertex
-chemical_distribution                       structures/shell_N_162_Rg_1_Rh_1_0530.chem_dist.dat
+structure                                   structures/sphere_N_162_R_1_.vertex
+chemical_distribution                       structures/sphere_N_162_R_1.chem_dist.dat
