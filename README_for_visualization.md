@@ -27,6 +27,32 @@ Install libraries: `pip install numpy matplotlib numba`
 
 ## How to Use
 
+### For 2D Simulations (Static and Animated Outputs)
+#### Example 1: Generate a 2D Static Plot
+To create a static image of the concentration field for a 2D simulation at time `t=100.0`.
+```
+python visualize_concentration.py \
+    --input-file simulation_results/chemo_2d_test.inputfile \
+    --trajectory-file simulation_results/chemo_2d_test.config \
+    --mode static \
+    --time 100.0 \
+    --output-file static_2d_concentration
+```
+This will generate `static_2d_concentration.png`.
+
+#### Example 2: Generate a 2D Animation (GIF format)
+To create a full animation for a 2D simulation, with each frame corresponding to `1.0` units of simulation time.
+```
+python visualize_concentration.py \
+    --input-file simulation_results/chemo_2d_test.inputfile \
+    --trajectory-file simulation_results/chemo_2d_test.config \
+    --mode animation \
+    --frame-interval 1.0 \
+    --writer gif \
+    --output-file animation_2d_chemo
+```
+This will generate `animation_2d_chemo.gif`.
+
 ### For 3D Simulations (Full 3D Visualization)
 
 The primary update is for 3D visualization. The script no longer computes a 2D slice but a full 3D volume.
@@ -59,10 +85,13 @@ The primary update is for 3D visualization. The script no longer computes a 2D s
 
 ## Command-Line Arguments
 
--   `--input-file` **(required)**: Path to the simulation input file (`*...inputfile`).
--   `--trajectory-file` **(required)**: Path to the trajectory file (`*...config`).
--   `--time` **(required)**: The simulation time `t1` for the snapshot.
--   `--output-file` (optional): Filename for the saved plot. Default: `concentration_field.png`.
--   `--resolution` (optional): The number of points per axis for the grid. **Use with caution for 3D.** Default: `50`.
--   `--padding` (optional): Space to add around the trajectory bounds. Default: `5.0`.
--   `--save-dat` (optional flag): If specified, saves the concentration grid. For 3D, this creates a `.npy` file.
+- `--input-file` **(required)**: Path to the simulation input file (`*...inputfile`).
+- `--trajectory-file` **(required)**: Path to the trajectory file (`*...config`).
+- `--output-file` (optional): Filename for the saved plot (without extension). Default: `concentration_field.png`.
+- `--resolution` (optional): The number of points per axis for the grid. **Use with caution for 3D.** Default: `50`.
+- `--mode` (optional):The operating mode: `static` or `animation`. Default: `static`.
+- `--time` **(required for static mode)**: The simulation time `t1` for the snapshot. 
+- `frame-interval` (optional for animation): The amount of simulation time between each frame of the animation. Default: `5.0`.
+- `writer` (optional for animation): The writer to use for saving animations: gif or ffmpeg. Default: `gif`.
+- `--padding` (optional): Space to add around the trajectory bounds. Default: `5.0`.
+- `--save-dat` (optional for static): If specified, saves the concentration grid. For 3D, this creates a `.npy` file.
