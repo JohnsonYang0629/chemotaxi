@@ -13,7 +13,7 @@ import os
 import sys
 
 
-# --- Calculation Functions (Unaltered) ---
+# --- Calculation Functions ---
 @njit(fastmath=True)
 def green_function_2d(r_vec_sq, tau, pe):
     if tau <= 1e-12: return 0.0
@@ -175,8 +175,8 @@ def plot_3d_sliced_view(concentration_field, grid_x, grid_y, grid_z, trajectory,
     ax3.plot_surface(xx_plane, yy_plane_val, zz_plane, color='green', alpha=0.15, rstride=5, cstride=5)
 
     ax3.set_title('3D Trajectory and Slice Positions')
-    ax3.set_xlabel('X');
-    ax3.set_ylabel('Y');
+    ax3.set_xlabel('X')
+    ax3.set_ylabel('Y')
     ax3.set_zlabel('Z')
     ax3.legend()
     max_range = np.array(
@@ -207,9 +207,9 @@ def run_static_mode(args, sim_params, trajectory, grid_x, grid_y, grid_z):
         title = f'Chemical Concentration at t={args.t1:.2f}\nPe={sim_params.peclet_number}, $\\Lambda$={sim_params.mobility_alpha}'
 
         fig, ax = plt.subplots(figsize=(10, 8))
-        ax.set_xlabel('X');
-        ax.set_ylabel('Y');
-        ax.set_title(title);
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_title(title)
         ax.set_aspect('equal', 'box')
 
         im = ax.pcolormesh(grid_x, grid_y, concentration_field, shading='gouraud', cmap='viridis', zorder=1)
@@ -249,7 +249,9 @@ def run_static_mode(args, sim_params, trajectory, grid_x, grid_y, grid_z):
                                                                    sim_params.dt, sim_params.peclet_number)
 
         print("Calculation complete.")
-        title = f'3D Sliced View at t={args.t1:.2f}\nPe={sim_params.peclet_number}, Type={getattr(sim_params, "particle_type", "non-janus")}'
+        title = f'3D Sliced View at t={args.t1:.2f}\n' \
+                f'Pe={sim_params.peclet_number}, $\\Lambda$={sim_params.mobility_alpha}, ' \
+                f'Type={getattr(sim_params, "particle_type", "non-janus")}'
         plot_3d_sliced_view(concentration_field, grid_x, grid_y, grid_z, trajectory, args.t1, sim_params.dt,
                             output_filename, title)
 
