@@ -32,6 +32,45 @@ def calc_gradient_history_part_2d(target_position, history_path_location, peclet
 
 
 @jit(nopython=True, fastmath=True)
+def calc_gradient_history_part_2d_optimized(target_position, history_path_location, peclet_number, step, dt):
+    gradient_segment = np.zeros((step, 2))
+    for s in range(step):
+        position_difference = target_position - history_path_location[s, :]
+
+        position_difference_norm_square = position_difference[0] ** 2 + position_difference[1] ** 2
+
+        tau = (step - s) * dt
+
+        if tau <= 1e-12: continue
+
+        coeff = 2 * (peclet_number / 4) ** 2 / (np.pi * tau ** 2)
+        exp_term = np.exp(-peclet_number / (4 * tau) * position_difference_norm_square)
+        gradient_segment[s, :] = coeff * exp_term * position_difference
+
+    gradient_history_part = 0.5 * dt * np.sum(gradient_segment, axis=0)
+    return gradient_history_part
+
+
+@jit(nopython=True, fastmath=True)
+def calc_gradient_local_part_2d_optimized(target_position, history_path_location, peclet_number, step, dt):
+    position_difference = target_position - history_path_location[step - 1, :]
+
+    position_difference_norm_square = position_difference[0] ** 2 + position_difference[1] ** 2
+
+    # Avoid divided by zero
+    if position_difference_norm_square < 1e-12:
+        return np.zeros(2)
+
+    rho = peclet_number * position_difference_norm_square / (4 * dt)
+
+    common_factor = 2 * peclet_number / (4 * np.pi * position_difference_norm_square ** 2)
+
+    gradient_local_part = common_factor * np.exp(-rho) * (rho ** 2 + 2 * rho + 2) * position_difference
+
+    return gradient_local_part
+
+
+@jit(nopython=True, fastmath=True)
 def calc_gradient_history_part_3d(target_position, history_path_location, peclet_number, step, dt):
     # Loop accelerated with numba
     # Recommended method
@@ -149,6 +188,36 @@ def calc_tangential_gradient_part(structure_ref_config, seq, gradient):
     return tangential_gradient_part
 
 
+@njit(fastmath=True)
+def calc_tangential_gradient_part_numba(structure_ref_config, seq, chemical_gradient_sum):
+    """
+    Calculates the tangential component of a gradient at a specific point on the structure (Numba-optimized).
+    """
+    # 1. Get the reference position vector for the current point
+    pos_ref = structure_ref_config[seq]
+
+    # 2. Normalize it to get the unit radial vector
+    pos_ref_norm = np.sqrt(pos_ref[0] ** 2 + pos_ref[1] ** 2)
+    if pos_ref_norm < 1e-12:
+        return np.zeros(2)
+
+    radial_vec_x = pos_ref[0] / pos_ref_norm
+    radial_vec_y = pos_ref[1] / pos_ref_norm
+
+    # 3. Calculate the unit tangential vector (by rotating the radial vector 90 degrees)
+    tangent_vec_x = -radial_vec_y
+    tangent_vec_y = radial_vec_x
+
+    # 4. Project the chemical gradient onto the tangential vector
+    # Projection = (gradient ⋅ tangent_vector) * tangent_vector
+    dot_product = chemical_gradient_sum[0] * tangent_vec_x + chemical_gradient_sum[1] * tangent_vec_y
+
+    tangential_gradient_x = dot_product * tangent_vec_x
+    tangential_gradient_y = dot_product * tangent_vec_y
+
+    return np.array([tangential_gradient_x, tangential_gradient_y])
+
+
 def calc_tangential_gradient_part_3d(structure_ref_config, seq, gradient):
     # Find the tangential part of the chemical gradient on a sphere
     # 3D cases
@@ -192,6 +261,19 @@ def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, 
             gradient_local_part = calc_gradient_local_part_2d(loc, location_history, peclet_number, step, dt)
             chemical_gradient_sum = gradient_history_part + gradient_local_part
             surface_gradient = calc_tangential_gradient_part(structure_ref_config, seq, chemical_gradient_sum)
+            surface_gradient_sum += surface_gradient
+
+        chem_gradient = 2 * np.pi/np.shape(structure_ref_config)[0] * surface_gradient_sum
+
+    elif step >= 2 and acceleration == "numba_optimized":
+        # Numba accelerated
+        # Averaged calculation time/step < 0.1s for step<=10000
+        surface_gradient_sum = np.zeros([2])
+        for seq, loc in enumerate(target_points_abs_loc):
+            gradient_history_part = calc_gradient_history_part_2d_optimized(loc, location_history, peclet_number, step, dt)
+            gradient_local_part = calc_gradient_local_part_2d_optimized(loc, location_history, peclet_number, step, dt)
+            chemical_gradient_sum = gradient_history_part + gradient_local_part
+            surface_gradient = calc_tangential_gradient_part_numba(structure_ref_config, seq, chemical_gradient_sum)
             surface_gradient_sum += surface_gradient
 
         chem_gradient = 2 * np.pi/np.shape(structure_ref_config)[0] * surface_gradient_sum
