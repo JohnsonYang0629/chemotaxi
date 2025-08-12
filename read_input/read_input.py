@@ -48,6 +48,8 @@ class ReadInput(object):
     self.core = int(self.options.get('core') or 1)
     self.numerical_method = str(self.options.get('numerical_method') or 'forward_euler')
 
+    self.droplet_num = int(self.options.get('droplet_num') or 1)
+
     self.mobility_alpha = float(self.options.get('mobility_alpha') or 1)
     self.radius = float(self.options.get('radius') or 1.0)
     self.intrinsic_linear_velocity = float(self.options.get('intrinsic_linear_velocity') or 1.0)
@@ -57,10 +59,6 @@ class ReadInput(object):
     self.gamma_t = float(self.options.get('translational_noise_gamma') or 500.0)
     self.gamma_r = float(self.options.get('rotational_noise_gamma') or 500.0)
     self.peclet_number = float(self.options.get('peclet_number') or 1.0)
-
-    self.initial_position_2D = np.fromstring(self.options.get('initial_position_2D') or '0 0', sep=' ')
-    self.initial_orientation_2D_vector = np.fromstring(self.options.get('initial_orientation_2D_vector') or '0 0',
-                                                       sep=' ')
 
     self.surface_disc_num = int(self.options.get('surface_disc_num') or 2)
 
@@ -79,14 +77,44 @@ class ReadInput(object):
     self.chemical_distribution_file = str.split(str(self.options.get('chemical_distribution') or 'None'))
     self.random_state = str(self.options.get('random_state') or 'None')
 
-    self.initial_position_3D = np.fromstring(self.options.get('initial_position_3D') or '0 0 0', sep=' ')
-    # Prepare quaternion for omega axis
-    orientation_quaternion_input = np.fromstring(self.options.get('initial_orientation_3D_quaternion') or
-                                                 '1 0 0 0', sep=' ')
-    orientation = [float(orientation_quaternion_input[0]), float(orientation_quaternion_input[1]),
-                   float(orientation_quaternion_input[2]), float(orientation_quaternion_input[3])]
-    norm_orientation = np.linalg.norm(orientation)
-    orientation_quaternion = Quaternion(orientation / norm_orientation)
-    self.initial_orientation_3D_quaternion = orientation_quaternion
+    if self.domain == "2D":
+      # For 2D
+      # Read the long string of 2D positions and reshape it into a (droplet_num, 2) array.
+      initial_pos_2d_flat = np.fromstring(self.options.get('initial_position_2D') or '0 0', sep=' ')
+      if len(initial_pos_2d_flat) != self.droplet_num * 2:
+        sys.exit(
+          f"Error: Mismatch between droplet_num ({self.droplet_num}) and number of initial_position_2D coordinates.")
+      self.initial_positions_2D = initial_pos_2d_flat.reshape((self.droplet_num, 2))
+
+      # Read the long string of 2D orientations and reshape it.
+      initial_orient_2d_flat = np.fromstring(self.options.get('initial_orientation_2D_vector') or '1 0', sep=' ')
+      if len(initial_orient_2d_flat) != self.droplet_num * 2:
+        sys.exit(
+          f"Error: Mismatch between droplet_num ({self.droplet_num}) and number of initial_orientation_2D_vector coordinates.")
+      self.initial_orientations_2D = initial_orient_2d_flat.reshape((self.droplet_num, 2))
+    elif self.domain == "3D":
+      # For 3D
+      # Read the long string of 3D positions and reshape it into a (droplet_num, 3) array.
+      initial_pos_3d_flat = np.fromstring(self.options.get('initial_position_3D') or '0 0 0', sep=' ')
+      if len(initial_pos_3d_flat) != self.droplet_num * 3:
+        sys.exit(
+          f"Error: Mismatch between droplet_num ({self.droplet_num}) and number of initial_position_3D coordinates.")
+      self.initial_positions_3D = initial_pos_3d_flat.reshape((self.droplet_num, 3))
+
+      # Read the long string of 3D quaternion orientations and reshape it.
+      initial_orient_3d_flat = np.fromstring(self.options.get('initial_orientation_3D_quaternion') or '1 0 0 0',
+                                             sep=' ')
+      if len(initial_orient_3d_flat) != self.droplet_num * 4:
+        sys.exit(
+          f"Error: Mismatch between droplet_num ({self.droplet_num}) and number of initial_orientation_3D_quaternion coordinates.")
+      orientations_3d_reshaped = initial_orient_3d_flat.reshape((self.droplet_num, 4))
+
+      # Create a list of Quaternion objects.
+      self.initial_orientations_3D_quaternion = []
+      for orient_array in orientations_3d_reshaped:
+        norm = np.linalg.norm(orient_array)
+        # Normalize the quaternion to ensure it represents a pure rotation.
+        q_values = orient_array / norm if norm > 1e-9 else orient_array
+        self.initial_orientations_3D_quaternion.append(Quaternion(q_values))
 
     return

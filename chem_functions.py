@@ -57,8 +57,8 @@ def calc_gradient_local_part_2d_optimized(target_position, history_path_location
 
     position_difference_norm_square = position_difference[0] ** 2 + position_difference[1] ** 2
 
-    # Avoid divided by zero
-    if position_difference_norm_square < 1e-12:
+    # Small position differences lead to large local part
+    if position_difference_norm_square < 1e-1:
         return np.zeros(2)
 
     rho = peclet_number * position_difference_norm_square / (4 * dt)
@@ -300,6 +300,69 @@ def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, 
         chem_gradient = 2 * np.pi/np.shape(structure_ref_config)[0] * surface_gradient_sum
 
     return chem_gradient
+
+
+# --- Main ChemPhysics Calculation Function (for 2D multiple bodies) ---
+def calc_surface_gradient_circle_numba_optimized(body_i, all_bodies, peclet_number, structure_ref_config, dt, *args, **kwargs):
+    """
+    Calculates the total surface gradient on a target body (body_i)
+    by summing the contributions from ALL source bodies (all_bodies).
+
+    Args:
+        body_i: The target body for which to calculate the force.
+        all_bodies: A list of all body objects in the simulation (the sources).
+        peclet_number (Pe): The Peclet number.
+        structure_ref_config: The vertex points defining the body's shape.
+        dt: The time step size.
+    """
+    step = kwargs.get('step')
+
+    # At step 0, there is no displacement and thus no gradient.
+    if step == 0 and step >= 0:
+        return np.zeros(2)
+
+    target_points_abs_loc = structure_ref_config + body_i.location
+    num_surface_points = np.shape(structure_ref_config)[0]
+    total_surface_gradient_sum = np.zeros(2)
+
+    # Loop over each surface point 's' on the target body_i
+    for s_idx, s_loc in enumerate(target_points_abs_loc):
+
+        chemical_gradient_at_point_s = np.zeros(2)
+
+        # === CORE MULTI-BODY LOGIC ===
+        # For this point 's', iterate through ALL source bodies (body_j)
+        # to sum up the chemical field they generate at this location.
+        for body_j in all_bodies:
+            # At step 1, there is no "history" part. The gradient is only
+            # determined by the "local" effect from the particle's state at step 0.
+            if step == 1:
+                # Call ONLY the local part calculation function.
+                # It calculates the effect from the interval t=0 to t=1.
+                grad_local_from_j = calc_gradient_local_part_2d_optimized(s_loc, body_j.location_history, peclet_number,
+                                                                          step, dt)
+
+                chemical_gradient_at_point_s += grad_local_from_j
+
+            # For all subsequent steps (step > 1), we include both history and local parts.
+            else:  # step > 1
+                # The history part integrates from t=0 to t=(step-1).
+                grad_hist_from_j = calc_gradient_history_part_2d_optimized(s_loc, body_j.location_history,
+                                                                           peclet_number, step, dt)
+                # The local part handles the most recent interval from t=(step-1) to t=step.
+                grad_local_from_j = calc_gradient_local_part_2d_optimized(s_loc, body_j.location_history, peclet_number,
+                                                                          step, dt)
+
+                chemical_gradient_at_point_s += grad_hist_from_j + grad_local_from_j
+
+        tangential_gradient_at_s = calc_tangential_gradient_part_numba(structure_ref_config, s_idx,
+                                                                       chemical_gradient_at_point_s)
+
+        total_surface_gradient_sum += tangential_gradient_at_s
+
+    # Approximate the surface integral
+    final_chem_force = (2 * np.pi / num_surface_points) * total_surface_gradient_sum
+    return final_chem_force
 
 
 def calc_surface_gradient_sphere_old(body, peclet_number, structure_ref_config, dt, *args, **kwargs):
