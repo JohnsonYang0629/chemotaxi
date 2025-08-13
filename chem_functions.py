@@ -984,12 +984,13 @@ def history_local_compose_3d_distribution(body, peclet_number, dt, *args, **kwar
         orient_history = np.array(body.orientation_history[:n_history_steps])
 
         # Call helper function to precompute all nodes
-        rotated_nodes_history = _precompute_rotated_nodes(n_history_steps, n_nodes, pos_history, orient_history,
+        rotated_nodes_history = _precompute_rotated_nodes(n_history_steps, n_nodes,
+                                                          pos_history, orient_history,
                                                           nodes_body_frame)
 
         # Call optimized history part function
-        grad_C_history = _history_part_dist_3d_numba_optimized(
-            n_nodes, rotated_nodes_history, sigma_dist, t_now, dt, D)
+        grad_C_history = _history_part_dist_3d_numba_optimized(n_nodes, rotated_nodes_history,
+                                                               sigma_dist, t_now, dt, D)
         total_grad_C_on_nodes += grad_C_history
 
     # Local Part
@@ -1021,5 +1022,102 @@ def history_local_compose_3d_distribution(body, peclet_number, dt, *args, **kwar
     r_vectors = nodes_body_frame
     torque_vectors = np.cross(r_vectors, tangential_grad)
     mean_torque = np.mean(torque_vectors, axis=0)
+
+    return mean_tangential_grad_force, mean_torque
+
+# ==============================================================================================================
+# Case 3：3D MULTI-BODY INTERACTIONS
+# ==============================================================================================================
+
+
+def history_local_compose_3d_multi_body(target_body, all_bodies, peclet_number, dt, *args, **kwargs):
+    """
+    Calculates the total chemical force and torque on a target body by summing the
+    contributions from all source bodies in the simulation. This function acts as a
+    dispatcher, calling the appropriate low-level Numba functions based on whether
+    the source is a point particle or a Janus particle.
+
+    Args:
+        target_body (Body3D): The body on which to calculate the force/torque.
+        all_bodies (list): A list of all Body3D objects in the simulation.
+        peclet_number (float): The Peclet number of the simulation.
+        dt (float): The simulation time step.
+        step (int): The current simulation step, passed via kwargs.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: A tuple containing:
+            - mean_tangential_grad_force (np.ndarray): The net chemical force vector (3D).
+            - mean_torque (np.ndarray): The net chemical torque vector (3D).
+    """
+    step = kwargs.get('step')
+    t_now = step * dt
+    D = 1.0 / peclet_number
+
+    target_surface_nodes = target_body.get_surface_nodes()
+    total_grad_on_target_nodes = np.zeros_like(target_surface_nodes)
+
+    for source_body in all_bodies:
+        grad_C_history = np.zeros_like(target_surface_nodes)
+        grad_C_local = np.zeros_like(target_surface_nodes)
+
+        is_source_janus = source_body.is_janus
+
+        # --- History Part Calculation ---
+        if step > 1:
+            n_history_steps = step - 1
+            if is_source_janus:
+                rotated_source_nodes_hist = _precompute_rotated_nodes(n_history_steps, source_body.n_nodes,
+                                                                      np.array(source_body.location_history[:n_history_steps]),
+                                                                      np.array(source_body.orientation_history[:n_history_steps]),
+                                                                      source_body.nodes_body_frame)
+
+                grad_C_history = _history_part_dist_3d_numba_optimized(target_body.n_nodes, rotated_source_nodes_hist,
+                                                                       source_body.sigma_distribution, t_now, dt, D)
+            else:  # Point Particle Source
+                grad_C_history = _history_part_point_3d_numba(target_body.n_nodes, target_surface_nodes,
+                                                              n_history_steps,
+                                                              np.array(source_body.location_history[:n_history_steps]),
+                                                              t_now, peclet_number, dt)
+
+        # --- Local Part Calculation ---
+        if step > 0:
+            if is_source_janus:
+                grad_C_local = _local_part_dist_3d_numba_optimized(target_body.n_nodes,
+                                                                   source_body.location, source_body.orientation,
+                                                                   source_body.location_history[step - 1],
+                                                                   source_body.orientation_history[step - 1],
+                                                                   source_body.nodes_body_frame,
+                                                                   source_body.sigma_distribution,
+                                                                   peclet_number, dt)
+            else:  # Point Particle Source
+                grad_C_local = _local_part_point_3d_numba(target_body.n_nodes, target_surface_nodes,
+                                                          source_body.location,
+                                                          source_body.location_history[step - 1], peclet_number, dt)
+
+        total_grad_on_target_nodes += grad_C_history + grad_C_local
+
+    # --- Final Force and Torque Calculation (on Target Body) ---
+    r_vectors_from_center = target_surface_nodes - target_body.location
+    norm_r = np.linalg.norm(r_vectors_from_center, axis=1, keepdims=True)
+    # Avoid division by zero if a node is at the center
+    norm_r[norm_r < 1e-12] = 1.0
+    normals = r_vectors_from_center / norm_r
+
+    grad_dot_norm = np.sum(total_grad_on_target_nodes * normals, axis=1, keepdims=True)
+    grad_normal_component = grad_dot_norm * normals
+    tangential_grad = total_grad_on_target_nodes - grad_normal_component
+
+    # The chemical force is the surface integral of the tangential gradient.
+    # Approximated by the mean over the discretized surface.
+    mean_tangential_grad_force = np.mean(tangential_grad, axis=0)
+
+    # The chemical torque is the surface integral of r_s x (tangential_gradient).
+    r_vectors_body_frame = target_body.nodes_body_frame
+    torque_vectors = np.cross(r_vectors_body_frame, tangential_grad)
+    mean_torque = np.mean(torque_vectors, axis=0)
+
+    # A non-Janus particle does not experience a self-induced chemical torque,
+    # though it can experience torque from other Janus particles. We let the
+    # calculation stand for all cases.
 
     return mean_tangential_grad_force, mean_torque

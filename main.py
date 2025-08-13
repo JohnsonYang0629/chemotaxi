@@ -128,7 +128,14 @@ if __name__ == '__main__':
                                                                           structure_ref_config=structure_ref_config,
                                                                           dt=dt)
     elif domain == '3D':
-        if read.particle_type == 'non_janus':
+        if read.droplet_num > 1:
+            integrator.history_local_compose_3d_multi_body = partial(chem_functions.history_local_compose_3d_multi_body,
+                                                                     acceleration=read.acceleration,
+                                                                     core=read.core,
+                                                                     peclet_number=read.peclet_number,
+                                                                     structure_ref_config=structure_ref_config,
+                                                                     dt=dt)
+        elif read.particle_type == 'non_janus':
             integrator.history_local_compose_3d_point = partial(chem_functions.history_local_compose_3d_point,
                                                                 acceleration=read.acceleration,
                                                                 core=read.core,
@@ -170,7 +177,7 @@ if __name__ == '__main__':
             print('Step = ', step, ', wallclock time = ', elapsed_time)
 
             if step % 100 == 0:
-                time_log_file.write(f'{elapsed_time}\n')
+                time_log_file.write(f'{step} {elapsed_time}\n')
 
             loc_file.write(str(read.droplet_num) + '\n')
             velocity_file.write(str(read.droplet_num) + '\n')
@@ -205,7 +212,6 @@ if __name__ == '__main__':
                                                                    body.chem_torque_gradient[0],
                                                                    body.chem_torque_gradient[1],
                                                                    body.chem_torque_gradient[2]))
-                time_log_file.write(str(elapsed_time) + '\n')
 
         integrator.advance_time_step(dt, step=step)
 
@@ -213,7 +219,7 @@ if __name__ == '__main__':
     if ((step + 1) % n_save) == 0 and step >= 0:
         elapsed_time = time.time() - start_time
         print('Step = ', step + 1, ', wallclock time = ', elapsed_time)
-        time_log_file.write(str(elapsed_time) + '\n')
+        time_log_file.write(f'{step} {elapsed_time}\n')
 
         loc_file.write(str(read.droplet_num) + '\n')
         velocity_file.write(str(read.droplet_num) + '\n')

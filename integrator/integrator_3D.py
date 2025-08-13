@@ -1,13 +1,14 @@
 import numpy as np
 from integrator.quaternion import Quaternion
 
+
 class ChemoIntegrator3D(object):
 
-    def __init__(self, body, scheme, domain, numerical_method):
+    def __init__(self, bodies, scheme, domain, numerical_method):
         """
         Initialize object
         """
-        self.body = body
+        self.bodies = bodies
         self.scheme = scheme
         self.domain = domain
         self.numerical_method = numerical_method
@@ -26,18 +27,99 @@ class ChemoIntegrator3D(object):
         self.calc_tangential_grad_3D = None
         self.history_local_compose_3d_distribution = None
         self.history_local_compose_3d_point = None
+        self.history_local_compose_3d_multi_body = None
         self.rotation_matrix_3d = None
 
     def advance_time_step(self, dt, *args, **kwargs):
         """
-        Advance time step with integrator self.scheme
+        Main entry point for advancing the simulation by one time step.
+        This method iterates through all bodies and calls the designated scheme
+        function to update each one individually.
         """
-        return getattr(self, self.scheme)(dt, *args, **kwargs)
+        # The scheme (e.g., 'history_local_compose_3d') is called for each body.
+        for body_to_update in self.bodies:
+            getattr(self, self.scheme)(body_to_update, dt, *args, **kwargs)
 
     def noise(self, dt, *args, **kwargs):
         return
 
-    def history_local_compose_3d(self, dt, *args, **kwargs):
+    def history_local_compose_3d(self, body_to_update, dt, *args, **kwargs):
+        """
+        Updates the state of a single 3D body (`body_to_update`) for one time step.
+        It calculates the chemical interactions from ALL bodies in the simulation
+        to determine the force and torque on this specific body.
+        """
+        while True:
+            step = kwargs.get('step')
+            force_grad = np.zeros(3)
+            torque_grad = np.zeros(3)
+
+            # On the first step, we assume zero initial chemical gradient.
+            # For subsequent steps, we calculate the full multi-body interaction.
+            if not self.first_step:
+                force_grad, torque_grad = self.history_local_compose_3d_multi_body(
+                    target_body=body_to_update,
+                    all_bodies=self.bodies,
+                    peclet_number=self.peclet_number,
+                    dt=dt,
+                    step=step
+                    )
+
+            # Calculate chemical and intrinsic velocity components
+            chem_prop = (self.mobility_alpha / (4 * np.pi)) * force_grad
+            chem_torque = (self.mobility_alpha / (4 * np.pi)) * torque_grad
+
+            intrinsic_swim_velocity = body_to_update.v0_axis * self.intrinsic_velocity[0]
+            linear_velocity_compose = intrinsic_swim_velocity + chem_prop
+
+            omega_axis = body_to_update.omega_axis
+            angular_velocity_vector = self.intrinsic_velocity[1] * omega_axis + chem_torque
+
+            # --- Update position and orientation based on the chosen numerical method ---
+
+            if self.numerical_method == "stochastic_first_order":
+                # Add stochastic terms for Brownian motion
+                random_rotation_vec = np.random.randn(3)
+                stochastic_rotation_term = np.sqrt(2 / self.gamma_r) * random_rotation_vec * np.sqrt(dt)
+
+                random_translation_vec = np.random.randn(3)
+                stochastic_translation_term = np.sqrt(2 / self.gamma_t) * random_translation_vec * np.sqrt(dt)
+
+                # Update orientation with deterministic and stochastic parts
+                rotation_increment = Quaternion.from_rotation(angular_velocity_vector * dt + stochastic_rotation_term)
+                body_to_update.omega_axis_orientation = rotation_increment * body_to_update.omega_axis_orientation
+
+                # Update translational position
+                body_to_update.location += linear_velocity_compose * dt + stochastic_translation_term
+
+            else:  # Default to Forward Euler if not stochastic
+                rotation_increment = Quaternion.from_rotation(angular_velocity_vector * dt)
+                body_to_update.omega_axis_orientation = rotation_increment * body_to_update.omega_axis_orientation
+                body_to_update.location += linear_velocity_compose * dt
+
+            # --- Finalize state update for the current body ---
+
+            # Update directional axes based on the new orientation
+            body_to_update.update_omega_axis()
+            body_to_update.update_v0_axis_from_omega_axis()
+
+            # Store history for the next time step's calculations
+            body_to_update.location_history[step + 1, :] = body_to_update.location
+            # Save orientation in [x, y, z, w] format, consistent with `body_3D.py`
+            body_to_update.orientation = body_to_update.omega_axis_orientation.flip_self()
+            body_to_update.orientation_history[step + 1, :] = body_to_update.orientation
+
+            # Store velocity and gradient for output and potential use in higher-order integrators
+            body_to_update.prescribed_velocity = np.append(linear_velocity_compose, angular_velocity_vector)
+            body_to_update.chem_surface_gradient = force_grad
+            body_to_update.chem_torque_gradient = torque_grad
+            body_to_update.velocities_previous_step = body_to_update.prescribed_velocity
+
+            # After the first step, this flag is set to False.
+            self.first_step = False
+            return
+
+    def history_local_compose_3d_single_body(self, dt, *args, **kwargs):
         """
         History part:
         [0, (N-1)dt]
