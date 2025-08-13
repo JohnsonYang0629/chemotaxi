@@ -19,6 +19,7 @@ class ReadInput(object):
     self.input_file = entries
     self.options = {}
     number_of_structures = 0
+    number_of_chem_dists = 0
 
     # Read input file
     comment_symbols = ['#']   
@@ -36,6 +37,9 @@ class ReadInput(object):
           if option == 'structure':
             option += str(number_of_structures)
             number_of_structures += 1
+          elif option == 'chemical_distribution':
+            option += str(number_of_chem_dists)
+            number_of_chem_dists += 1
           self.options[option] = value
 
     # Set options to test or default values
@@ -50,7 +54,6 @@ class ReadInput(object):
 
     self.droplet_num = int(self.options.get('droplet_num') or 1)
 
-    self.mobility_alpha = float(self.options.get('mobility_alpha') or 1)
     self.radius = float(self.options.get('radius') or 1.0)
     self.intrinsic_linear_velocity = float(self.options.get('intrinsic_linear_velocity') or 1.0)
     self.intrinsic_angular_velocity = float(self.options.get('intrinsic_angular_velocity') or 1.0)
@@ -58,7 +61,6 @@ class ReadInput(object):
     self.persistence_length = float(self.options.get('persistence_length') or 1.0)
     self.gamma_t = float(self.options.get('translational_noise_gamma') or 500.0)
     self.gamma_r = float(self.options.get('rotational_noise_gamma') or 500.0)
-    self.peclet_number = float(self.options.get('peclet_number') or 1.0)
 
     self.surface_disc_num = int(self.options.get('surface_disc_num') or 2)
 
@@ -76,6 +78,23 @@ class ReadInput(object):
     self.structure = str.split(str(self.options.get('structure0')))
     self.chemical_distribution_file = str.split(str(self.options.get('chemical_distribution') or 'None'))
     self.random_state = str(self.options.get('random_state') or 'None')
+
+    self.mobility_alphas = np.fromstring(self.options.get('mobility_alpha') or '1.0', sep=' ')
+    self.peclet_numbers = np.fromstring(self.options.get('peclet_number') or '1.0', sep=' ')
+
+    if len(self.mobility_alphas) != self.droplet_num:
+      print(f"Warning: Number of mobility_alpha values does not match droplet_num. Using first value for all.")
+      self.mobility_alphas = np.full(self.droplet_num, self.mobility_alphas[0])
+    if len(self.peclet_numbers) != self.droplet_num:
+      print(f"Warning: Number of peclet_number values does not match droplet_num. Using first value for all.")
+      self.peclet_numbers = np.full(self.droplet_num, self.peclet_numbers[0])
+
+    if self.domain == "3D":
+      self.particle_types = str.split(self.options.get('particle_type') or 'non_janus')
+
+      if len(self.particle_types) != self.droplet_num:
+        print(f"Warning: Number of particle_type values does not match droplet_num. Using first value for all.")
+        self.particle_types = [self.particle_types[0]] * self.droplet_num
 
     if self.domain == "2D":
       # For 2D
@@ -116,5 +135,13 @@ class ReadInput(object):
         # Normalize the quaternion to ensure it represents a pure rotation.
         q_values = orient_array / norm if norm > 1e-9 else orient_array
         self.initial_orientations_3D_quaternion.append(Quaternion(q_values))
+
+    self.structures = []
+    for i in range(number_of_structures):
+      self.structures.append(str.split(str(self.options.get(f'structure{i}'))))
+
+    self.chemical_distribution_files = []
+    for i in range(number_of_chem_dists):
+      self.chemical_distribution_files.append(str.split(str(self.options.get(f'chemical_distribution{i}')))[0])
 
     return

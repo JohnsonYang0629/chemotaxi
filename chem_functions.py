@@ -303,7 +303,7 @@ def calc_surface_gradient_circle(body, peclet_number, structure_ref_config, dt, 
 
 
 # --- Main ChemPhysics Calculation Function (for 2D multiple bodies) ---
-def calc_surface_gradient_circle_numba_optimized(body_i, all_bodies, peclet_number, structure_ref_config, dt, *args, **kwargs):
+def calc_surface_gradient_circle_numba_optimized(body_i, all_bodies, dt, *args, **kwargs):
     """
     Calculates the total surface gradient on a target body (body_i)
     by summing the contributions from ALL source bodies (all_bodies).
@@ -311,8 +311,8 @@ def calc_surface_gradient_circle_numba_optimized(body_i, all_bodies, peclet_numb
     Args:
         body_i: The target body for which to calculate the force.
         all_bodies: A list of all body objects in the simulation (the sources).
-        peclet_number (Pe): The Peclet number.
-        structure_ref_config: The vertex points defining the body's shape.
+        peclet_number (Pe): The Peclet number called by body_j.
+        structure_ref_config: The vertex points defining the body's shape (called by body_i).
         dt: The time step size.
     """
     step = kwargs.get('step')
@@ -321,8 +321,9 @@ def calc_surface_gradient_circle_numba_optimized(body_i, all_bodies, peclet_numb
     if step == 0 and step >= 0:
         return np.zeros(2)
 
+    structure_ref_config = body_i.structure_ref_config
     target_points_abs_loc = structure_ref_config + body_i.location
-    num_surface_points = np.shape(structure_ref_config)[0]
+    num_surface_points = body_i.n_nodes
     total_surface_gradient_sum = np.zeros(2)
 
     # Loop over each surface point 's' on the target body_i
@@ -339,7 +340,8 @@ def calc_surface_gradient_circle_numba_optimized(body_i, all_bodies, peclet_numb
             if step == 1:
                 # Call ONLY the local part calculation function.
                 # It calculates the effect from the interval t=0 to t=1.
-                grad_local_from_j = calc_gradient_local_part_2d_optimized(s_loc, body_j.location_history, peclet_number,
+                grad_local_from_j = calc_gradient_local_part_2d_optimized(s_loc, body_j.location_history,
+                                                                          body_j.peclet_number,
                                                                           step, dt)
 
                 chemical_gradient_at_point_s += grad_local_from_j
@@ -348,9 +350,10 @@ def calc_surface_gradient_circle_numba_optimized(body_i, all_bodies, peclet_numb
             else:  # step > 1
                 # The history part integrates from t=0 to t=(step-1).
                 grad_hist_from_j = calc_gradient_history_part_2d_optimized(s_loc, body_j.location_history,
-                                                                           peclet_number, step, dt)
+                                                                           body_j.peclet_number, step, dt)
                 # The local part handles the most recent interval from t=(step-1) to t=step.
-                grad_local_from_j = calc_gradient_local_part_2d_optimized(s_loc, body_j.location_history, peclet_number,
+                grad_local_from_j = calc_gradient_local_part_2d_optimized(s_loc, body_j.location_history,
+                                                                          body_j.peclet_number,
                                                                           step, dt)
 
                 chemical_gradient_at_point_s += grad_hist_from_j + grad_local_from_j
@@ -699,7 +702,7 @@ def quaternion_to_rotation_matrix(q):
     wx, wy, wz = w * x, w * y, w * z
 
     # 构建旋转矩阵
-    R = np.empty((3, 3))
+    R = np.zeros((3, 3))
     R[0, 0] = 1.0 - 2.0 * (y2 + z2)
     R[0, 1] = 2.0 * (xy - wz)
     R[0, 2] = 2.0 * (xz + wy)
@@ -815,7 +818,7 @@ def _precompute_rotated_nodes(n_history_steps, n_nodes, pos_history, orient_hist
     """
     Precompute rotated node positions for history time steps
     """
-    rotated_nodes_history = np.empty((n_history_steps, n_nodes, 3))
+    rotated_nodes_history = np.zeros((n_history_steps, n_nodes, 3))
     for i in prange(n_history_steps):
         pos_center_hist = pos_history[i]
         orient_hist = orient_history[i]
@@ -915,12 +918,11 @@ def _local_part_dist_3d_numba(n_nodes, pos_now, orient_now, pos_before, orient_b
 
 @njit(parallel=True, fastmath=True)
 def _local_part_dist_3d_numba_optimized(n_nodes, pos_now, orient_now, pos_before, orient_before, nodes_body_frame,
-                                        sigma_dist, Pe, dt):
+                                        sigma_dist, dt, D):
     """
     Local Part: vectorized version for optimized computation time
     """
     total_grad_C_local = np.zeros((n_nodes, 3))
-    D = 1.0 / Pe
 
     # mid position and orientation for mid-point rule (CoM)
     pos_mid = (pos_now + pos_before) / 2.0
@@ -952,6 +954,54 @@ def _local_part_dist_3d_numba_optimized(n_nodes, pos_now, orient_now, pos_before
         G[valid_indices] = np.power(const, -1.5) * np.exp(-r_sqs[valid_indices] / const)
 
         grad_G = -r_vecs / (2 * D * tau) * G.reshape(-1, 1)
+
+        # gradient multiplied by sigma value.
+        weighted_grad_sum = np.sum(grad_G * sigma_dist_scaled, axis=0)
+        total_grad_C_local[j] = weighted_grad_sum * dt
+
+    return total_grad_C_local
+
+
+@njit(parallel=True, fastmath=True)
+def _local_part_dist_3d_numba_optimized_test(target_nodes_lab,
+                                        pos_now, orient_now, pos_before, orient_before,
+                                        nodes_body_frame, sigma_dist, dt, D):
+    """
+    Local Part: vectorized version for optimized computation time
+    """
+    # mid position and orientation for mid-point rule (CoM)
+    pos_mid = (pos_now + pos_before) / 2.0
+    orient_mid = (orient_now + orient_before) / 2.0
+    orient_mid /= np.linalg.norm(orient_mid)
+    rot_matrix_mid = quaternion_to_rotation_matrix(orient_mid)
+
+    # mid position for source particle in lab frame
+    source_nodes_lab_mid = pos_mid + np.dot(nodes_body_frame, rot_matrix_mid.T)
+
+    n_target_nodes = target_nodes_lab.shape[0]
+    total_grad_C_local = np.zeros((n_target_nodes, 3))
+
+    sigma_dist_scaled = sigma_dist.reshape(-1, 1)
+    tau = 0.5 * dt
+    const = (4 * np.pi * D * tau)
+    if const <= 1e-12:
+        return total_grad_C_local
+
+    for j in prange(n_target_nodes):
+        target_node_position = target_nodes_lab[j]
+
+        # Vectorized computations: vec distance and distance square for all source nodes to target nodes.
+        r_vecs = target_node_position - source_nodes_lab_mid
+        r_sqs = np.sum(r_vecs ** 2, axis=1)
+
+        # Calculate Greens' function and its gradient for all source nodes.
+        # avoiding dividing by zero when it is too close.
+        valid_indices = r_sqs > 1e-12
+        G = np.zeros(r_sqs.shape[0])
+        if np.any(valid_indices):
+            G[valid_indices] = np.power(const, -1.5) * np.exp(-r_sqs[valid_indices] / const)
+
+        grad_G = (-r_vecs / (2 * D * tau)) * G.reshape(-1, 1)
 
         # gradient multiplied by sigma value.
         weighted_grad_sum = np.sum(grad_G * sigma_dist_scaled, axis=0)
@@ -1002,7 +1052,7 @@ def history_local_compose_3d_distribution(body, peclet_number, dt, *args, **kwar
 
         # Call optimized local part function
         grad_C_local = _local_part_dist_3d_numba_optimized(
-            n_nodes, pos_now, orient_now, pos_before, orient_before, nodes_body_frame, sigma_dist, peclet_number, dt)
+            n_nodes, pos_now, orient_now, pos_before, orient_before, nodes_body_frame, sigma_dist, dt, D)
         total_grad_C_on_nodes += grad_C_local
 
     # Calculate chemical force and torque
@@ -1030,7 +1080,7 @@ def history_local_compose_3d_distribution(body, peclet_number, dt, *args, **kwar
 # ==============================================================================================================
 
 
-def history_local_compose_3d_multi_body(target_body, all_bodies, peclet_number, dt, *args, **kwargs):
+def history_local_compose_3d_multi_body(target_body, all_bodies, dt, *args, **kwargs):
     """
     Calculates the total chemical force and torque on a target body by summing the
     contributions from all source bodies in the simulation. This function acts as a
@@ -1040,7 +1090,7 @@ def history_local_compose_3d_multi_body(target_body, all_bodies, peclet_number, 
     Args:
         target_body (Body3D): The body on which to calculate the force/torque.
         all_bodies (list): A list of all Body3D objects in the simulation.
-        peclet_number (float): The Peclet number of the simulation.
+        peclet_number (float): The Peclet number called by source body respectively.
         dt (float): The simulation time step.
         step (int): The current simulation step, passed via kwargs.
 
@@ -1051,12 +1101,13 @@ def history_local_compose_3d_multi_body(target_body, all_bodies, peclet_number, 
     """
     step = kwargs.get('step')
     t_now = step * dt
-    D = 1.0 / peclet_number
 
     target_surface_nodes = target_body.get_surface_nodes()
     total_grad_on_target_nodes = np.zeros_like(target_surface_nodes)
 
     for source_body in all_bodies:
+        peclet_number = source_body.peclet_number
+        D = 1.0 / peclet_number
         grad_C_history = np.zeros_like(target_surface_nodes)
         grad_C_local = np.zeros_like(target_surface_nodes)
 
@@ -1077,7 +1128,7 @@ def history_local_compose_3d_multi_body(target_body, all_bodies, peclet_number, 
                 grad_C_history = _history_part_point_3d_numba(target_body.n_nodes, target_surface_nodes,
                                                               n_history_steps,
                                                               np.array(source_body.location_history[:n_history_steps]),
-                                                              t_now, peclet_number, dt)
+                                                              t_now, dt, D)
 
         # --- Local Part Calculation ---
         if step > 0:

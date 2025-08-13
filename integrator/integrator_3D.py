@@ -17,8 +17,6 @@ class ChemoIntegrator3D(object):
         self.velocities = None  # [vx, vy, vz, wx, wy, wz]
         self.velocities_previous_step = None
         self.first_step = True
-        self.peclet_number = 0.0
-        self.mobility_alpha = 0.0
         self.intrinsic_velocity = np.array([0, 0])  # compact vector [v_0,omega_0]
         self.gamma_r = 0.0  # Rotational diffusion
         self.gamma_t = 0.0  # Translational diffusion
@@ -60,14 +58,13 @@ class ChemoIntegrator3D(object):
                 force_grad, torque_grad = self.history_local_compose_3d_multi_body(
                     target_body=body_to_update,
                     all_bodies=self.bodies,
-                    peclet_number=self.peclet_number,
                     dt=dt,
                     step=step
                     )
 
             # Calculate chemical and intrinsic velocity components
-            chem_prop = (self.mobility_alpha / (4 * np.pi)) * force_grad
-            chem_torque = (self.mobility_alpha / (4 * np.pi)) * torque_grad
+            chem_prop = (body_to_update.mobility_alpha / (4 * np.pi)) * force_grad
+            chem_torque = (body_to_update.mobility_alpha / (4 * np.pi)) * torque_grad
 
             intrinsic_swim_velocity = body_to_update.v0_axis * self.intrinsic_velocity[0]
             linear_velocity_compose = intrinsic_swim_velocity + chem_prop

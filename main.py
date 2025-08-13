@@ -43,8 +43,8 @@ if __name__ == '__main__':
     output_name = read.output_name
     copyfile(input_file, output_name + '.inputfile')
 
-    structure_file_name = read.structure
-    structure_ref_config = read_vertex_file.read_vertex_file(structure_file_name[0])
+    # structure_file_name = read.structure
+    # structure_ref_config = read_vertex_file.read_vertex_file(structure_file_name[0])
 
     if read.random_state != 'None':
         random_state_file = read.random_state
@@ -81,24 +81,39 @@ if __name__ == '__main__':
         for i in range(read.droplet_num):
             location = read.initial_positions_2D[i]
             orientation = read.initial_orientations_2D[i]
-            body = body_2D.Body2D(location, orientation, n_steps)
+            structure_file = read.structures[i][0] if i < len(read.structures) else read.structures[0][0]
+            structure_ref_config = read_vertex_file.read_vertex_file(structure_file)
+            body = body_2D.Body2D(location, orientation, structure_ref_config, n_steps)
             body.location_history[0, :] = location
             body.ID = i
+            body.peclet_number = read.peclet_numbers[i]
+            body.mobility_alpha = read.mobility_alphas[i]
             bodies.append(body)
 
     elif domain == '3D':
         for i in range(read.droplet_num):
             location = read.initial_positions_3D[i]
             orientation_quat = read.initial_orientations_3D_quaternion[i]
+            structure_file = read.structures[i][0] if i < len(read.structures) else read.structures[0][0]
+            structure_ref_config = read_vertex_file.read_vertex_file(structure_file)
             body = body_3D.Body3D(location, orientation_quat, structure_ref_config, n_steps)
             body.location_history[0, :] = location
             body.orientation_history[0, :] = orientation_quat.flip_self()
             body.orientation = orientation_quat.flip_self()
             body.ID = i
-            if read.particle_type == 'janus':
-                chemical_dist_file = read.chemical_distribution_file
-                sigma_values = read_chem_dist_file.read_chemical_distribution_file(chemical_dist_file[0])
-                body.set_sigma_distribution(sigma_values)
+            body.peclet_number = read.peclet_numbers[i]
+            body.mobility_alpha = read.mobility_alphas[i]
+
+            particle_type = read.particle_types[i] if i < len(read.particle_types) else 'non_janus'
+            if particle_type == 'janus':
+                chem_dist_file = read.chemical_distribution_files[i] \
+                    if i < len(read.chemical_distribution_files) else 'None'
+                if chem_dist_file != 'None':
+                    sigma_values = read_chem_dist_file.read_chemical_distribution_file(chem_dist_file)
+                    body.set_sigma_distribution(sigma_values)
+                else:
+                    body.set_sigma_distribution(None)
+
             bodies.append(body)
 
     else:
@@ -110,11 +125,9 @@ if __name__ == '__main__':
     # The integrator will now manage the state of these bodies.
     if domain == '2D':
         integrator = ChemoIntegrator2D(bodies, scheme, domain, numerical_method)
-    else:  # 3D
+    elif domain == '3D':
         integrator = ChemoIntegrator3D(bodies, scheme, domain, numerical_method)
 
-    integrator.peclet_number = read.peclet_number
-    integrator.mobility_alpha = read.mobility_alpha
     integrator.intrinsic_velocity = intrinsic_velocity
     integrator.gamma_r = read.gamma_r
     integrator.gamma_t = read.gamma_t
@@ -122,38 +135,24 @@ if __name__ == '__main__':
     if domain == '2D':
         integrator.rotation_matrix_2d = chem_functions.rotation_matrix_2d
         integrator.calc_surface_gradient_circle_numba_optimized = partial(chem_functions.calc_surface_gradient_circle_numba_optimized,
-                                                                          acceleration=read.acceleration,
-                                                                          core=read.core,
-                                                                          peclet_number=read.peclet_number,
-                                                                          structure_ref_config=structure_ref_config,
                                                                           dt=dt)
     elif domain == '3D':
-        if read.droplet_num > 1:
+        # For all cases in 3D (single/multi-body, janus/non_janus)
+        if read.droplet_num >= 1:
             integrator.history_local_compose_3d_multi_body = partial(chem_functions.history_local_compose_3d_multi_body,
-                                                                     acceleration=read.acceleration,
-                                                                     core=read.core,
-                                                                     peclet_number=read.peclet_number,
-                                                                     structure_ref_config=structure_ref_config,
                                                                      dt=dt)
         elif read.particle_type == 'non_janus':
             integrator.history_local_compose_3d_point = partial(chem_functions.history_local_compose_3d_point,
-                                                                acceleration=read.acceleration,
-                                                                core=read.core,
-                                                                peclet_number=read.peclet_number,
                                                                 structure_ref_config=structure_ref_config,
                                                                 dt=dt)
         elif read.particle_type == 'janus':
             integrator.history_local_compose_3d_distribution = partial(chem_functions.history_local_compose_3d_distribution,
-                                                                       acceleration=read.acceleration,
-                                                                       core=read.core,
-                                                                       peclet_number=read.peclet_number,
                                                                        structure_ref_config=structure_ref_config,
                                                                        dt=dt)
         elif read.particle_type == 'default':
             integrator.calc_tangential_grad_3D = partial(chem_functions.calc_tangential_grad_3D,
                                                          acceleration=read.acceleration,
                                                          core=read.core,
-                                                         peclet_number=read.peclet_number,
                                                          structure_ref_config=structure_ref_config,
                                                          dt=dt)
 

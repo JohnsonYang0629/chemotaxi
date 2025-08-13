@@ -45,6 +45,9 @@ class Body3D(object):
     self.sigma_distribution = np.ones(self.n_nodes) / self.n_nodes
     self.is_janus = False
 
+    self.peclet_number = 1.0
+    self.mobility_alpha = 1.0
+
     self.function_force = self.default_none
     self.function_torque = self.default_none
     self.prescribed_velocity = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
@@ -68,7 +71,7 @@ class Body3D(object):
       return
 
     # 2. normalize with the sum of total sigma
-    sigma_values = np.asarray(sigma_values, dtype=float)
+    sigma_values = np.asarray(sigma_values, dtype=float).flatten()
     total_sigma = np.sum(sigma_values)
 
     # 3. normalization

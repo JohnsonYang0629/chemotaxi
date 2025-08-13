@@ -7,7 +7,7 @@ class Body2D(object):
   '''
   Small class to handle a single body in 2D domain.
   '''
-  def __init__(self, location, orientation, n_steps):
+  def __init__(self, location, orientation, structure_ref_config, n_steps):
     '''
     Constructor. Take arguments like ...
     '''
@@ -29,6 +29,13 @@ class Body2D(object):
     self.prescribed_velocity = np.array([0.0, 0.0, 0.0])
     self.velocities_previous_step = np.array([0.0, 0.0, 0.0])
     self.chem_surface_gradient = np.array([0.0, 0.0])
+
+    self.structure_ref_config = np.copy(structure_ref_config)
+    self.n_nodes = len(self.structure_ref_config)
+
+    self.peclet_number = 1.0
+    self.mobility_alpha = 1.0
+
     self.ID = None
 
   def calc_prescribed_velocity(self):

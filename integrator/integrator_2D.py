@@ -17,8 +17,6 @@ class ChemoIntegrator2D(object):
         self.velocities = None
         self.velocities_previous_step = None
         self.first_step = True
-        self.peclet_number = 0.0
-        self.mobility_alpha = 0.0
         self.intrinsic_velocity = np.array([0, 0])
         self.gamma_r = 0.0
         self.gamma_t = 0.0
@@ -49,10 +47,13 @@ class ChemoIntegrator2D(object):
         """
         while True:
             step = kwargs.get('step')
+            peclet_number = body_to_update.peclet_number
+            mobility_alpha = body_to_update.mobility_alpha
+
             if self.first_step == False:
                 # Use history-local compose method
                 chem_force = self.calc_surface_gradient_circle_numba_optimized(body_to_update, self.bodies, *args, **kwargs)
-                chem_prop = self.mobility_alpha/(2 * np.pi) * chem_force
+                chem_prop = mobility_alpha/(2 * np.pi) * chem_force
                 angular_velocity = self.intrinsic_velocity[1]
                 # Two-step Adams-Bashforth method
                 if self.numerical_method == "adams_bashforth_2":
@@ -90,7 +91,7 @@ class ChemoIntegrator2D(object):
             else:
                 # Use forward Euler method for the first step
                 chem_force = self.calc_surface_gradient_circle_numba_optimized(body_to_update, self.bodies, *args, **kwargs)
-                chem_prop = self.mobility_alpha/(2 * np.pi) * chem_force
+                chem_prop = mobility_alpha/(2 * np.pi) * chem_force
                 angular_velocity = self.intrinsic_velocity[1]  # noise required
                 angular_velocity_dt = angular_velocity * dt
                 orientation_new = np.dot(self.rotation_matrix_2d(angular_velocity_dt), body_to_update.orientation)
