@@ -131,13 +131,14 @@ Now, you can inspect the outputs, `ls simulation_results/outputname.*`. The outp
 * `.inputfile`: a copy of the input file.
 
 * `.time`: the wall-clock time elapsed during the simulation (in seconds).
-* `.time.log`: the wall-clock time elapsed per step (in seconds).
+* `.time.log`: the wall-clock time elapsed per 100 step (in seconds).
 * `.random_state`: the file with the state of the random generator from current simulation.
 
 **List of options for the input file:**
 * `domain` (string). Options: `2D` and `3D`. 
 * `scheme` (string). Option: `history_local_compose_2d` and `history_local_compose_3d`.
-* `particle_type` (string). Option for 3D: `non_janus` and `janus`.
+* `particle_type` (string). Option for 3D: `non_janus` and `janus`, if multiple particles included, 
+may use `janus non_janus` to represent particles types in sequence.
 * `acceleration` (string). Options: `numba` and `parallel`. Numba acceleration is recommended for total step <= 10000;
 Parallel acceleration is recommended for EXTRA-long simulation and fine grid of the structure (or even 3D cases).
 * `core` (int (default 1)). Number of cores used for parallel processing. Only effective for the case `acceleration` used `parallel`.
@@ -151,7 +152,8 @@ Parallel acceleration is recommended for EXTRA-long simulation and fine grid of 
 
 
 * `mobility_alpha` (float (default 1)): In the JCP paper and my note, we use notation $\Lambda$, which is a mobility parameter to determine
-the magnitude of the chemical force.
+the magnitude of the chemical force. 
+Support multi-particles by entering `mobility_alpha` number with spacings (e.g. `mobility_alpha  1 10`)
 * `radius` (float (default 1)): The geometric radius of the droplet. Normally we use non-dimensionlized parameter $R=1$.
 * `intrinsic_linear_velocity` (float (default 1)): The intrinsic linear velocity of the droplet. 
 Normally we use non-dimensionlized parameter $v_0=1$.
@@ -163,9 +165,10 @@ Normally we use non-dimensionlized parameter $Q_0=1$.
 * `translational_noise_gamma` (float (default 500)): drₚ/dt = p̂ + F꜀ + √(2/Γₜ) * η(t).
 * `peclet_number`(float (default 1)): $Pe = Rv_o/D$, 
 is the ratio of self-propelling rate of the droplet to diffusion rate of emitted solute.
+Support multi-particles by entering `peclet_number` number with spacings (e.g. `peclet_number  1 10`)
 * `initial_position_2D`(float (vector default 0 0)) or `initial_position_3D`(float (vector default 0 0 0)): Vector format, 2D in format $(x_0, y_0)$, 3D in format $(x_0, y_0, z_0)$
 * `initial_orientation_2D_vector`(float (vector default 0 0 )) or `initial_orientation_3D_quaternion`(float (vector default 1 0 0 0 )): Vector format, 2D in format $(R\cos\theta, R\sin\theta)$; 3D use Quaternion format.
-* `droplet_num`(int (default 1)): Currently this code only support single particle cases.
+* `droplet_num`(int (default 1)): This code now support multi-particle cases.
 * `n_steps`(int (default 1)): Number of simulation steps.
 * `dt`(float): time step length to advance the simulation.
 * `save_clones`(string (default `one_file`)) :options
