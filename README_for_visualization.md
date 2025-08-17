@@ -1,19 +1,25 @@
 # Chemical Concentration Field Visualization Tool
 
-This script, `visualize_concentration.py`, is a post-processing tool designed to work with the output of the `chemotaxi` simulation package. It calculates and visualizes the chemical concentration field at a specific moment in time, based on the complete trajectory of a simulated particle.
+This script, `visualize_concentration.py`, is a post-processing tool designed to work with the output of the chemotaxi simulation package. 
+It calculates and visualizes the chemical concentration field at a specific moment in time, based on the complete trajectory of the simulated particles.
 
 ## Features
 
--   Reads simulation parameters directly from the `*.inputfile`.
--   Loads particle trajectory data (`*.config` file).
--   Supports both **2D** and **3D** simulation domains.
-    -   **For 2D**, it generates a 2D heatmap.
-    -   **For 3D**, it now computes the concentration on a full 3D grid and generates a **3D scatter plot**, visualizing areas of significant concentration.
--   **Handles two types of 3D particles**:
+- Reads simulation parameters directly from the `*.inputfile`, 
+including support for individual parameters (like Peclet numbers) for multiple particles.
+- Loads and parses the new multi-particle trajectory data (`*.config` file).
+- Supports both **2D** and **3D** simulation domains.
+    - **2D Mode**: Generates static heatmaps or full animations of the concentration evolution.
+    - **3D Mode**: Efficiently computes and renders two key 2D concentration slices, 
+visualizing them in context with the 3D trajectories, avoiding expensive calculations of the full 3D volume.
+- **Handles two types of 3D particles**:
     1.  **`non-janus`**: A simple point particle source.
     2.  **`janus`**: A spherical particle with a defined surface chemical distribution, accounting for both translation and rotation (via quaternions).
--   Uses `numba` for just-in-time parallel compilation to significantly accelerate calculations.
--   Optionally saves the calculated concentration grid to a file. For 3D, it saves to a more efficient binary `.npy` format.
+- Uses `numba` for just-in-time parallel compilation to significantly accelerate calculations.
+- Flexible Command-Line Interface:
+  1. Supports using a file prefix for simplified input, automatically matching `.inputfile` and `.config` files.
+  2. Provides multiple 3D slice positioning modes, including auto-centering, targeting the end of a trajectory, or specifying exact coordinates manually.
+- Optionally saves the calculated concentration grid to a file. For 3D, it saves to a more efficient binary `.npy` format.
 
 ## Prerequisites
 
