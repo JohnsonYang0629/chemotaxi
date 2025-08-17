@@ -1,0 +1,37 @@
+# Job description
+job_name                    example_with_5_particle_medium_pe_lambda_random_initial_positions
+job_type                    dynamic
+domain                      2D
+scheme                      history_local_compose_2d
+numerical_method            stochastic_first_order
+
+# Parameters specification
+radius                      1
+intrinsic_linear_velocity   1
+intrinsic_angular_velocity  1
+emission_rate               1
+translational_noise_gamma   500
+rotational_noise_gamma      500
+
+mobility_alpha              5 5 5 5 5
+peclet_number               20 20 20 20 20
+
+initial_position_2D            0.9852975098069527 -1.6944473408493155 1.0274797256500112 0.12611992789101034 0.36634548725302984 1.7663620874045947 2.297516947447101 -2.388925888749971 -2.2333394338266936 0.3941929001889677
+initial_orientation_2D_vector   0.7985856000285549 -0.6018812502703775 -0.9937995908950601 -0.1111862092923902 -0.15908321033955408 -0.9872651782515481 -0.48979145099400495 -0.8718396266132822 0.7200502276607311 -0.6939219478051759
+
+# Numerical simulation configuration
+droplet_num                 5
+n_steps                     10000
+dt                          0.0625
+
+# Output configuration
+output_name                 examples/case_2D_N5_medium_Pe_lambda/chemo_2d_N5_pe_20_lambda_5_dt_k4
+save_clones				    one_file
+initial_step                0
+
+# Discretization info
+structure                   structures/circle_R_1_N20.vertex
+structure                   structures/circle_R_1_N20.vertex
+structure                   structures/circle_R_1_N20.vertex
+structure                   structures/circle_R_1_N20.vertex
+structure                   structures/circle_R_1_N20.vertex

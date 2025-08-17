@@ -1,0 +1,32 @@
+# Job description
+job_name                    performance_test_for_discretization
+job_type                    dynamic
+domain                      3D
+scheme                      history_local_compose_3d
+particle_type               non_janus
+numerical_method            forward_euler
+
+# Parameters specification
+radius                      1
+intrinsic_linear_velocity   1
+intrinsic_angular_velocity  1
+emission_rate               1
+
+mobility_alpha              -1
+peclet_number               10
+
+initial_position_3D                         0 0 0
+initial_orientation_3D_quaternion           1 0 0 0
+
+# Numerical simulation configuration
+droplet_num                 1
+n_steps                     10000
+dt                          0.0625
+
+# Output configuration
+output_name                 examples/case_3D_performance_test/chemo_3d_N1_nonjanus_performance_blob_12
+save_clones				    one_file
+initial_step                0
+
+# Discretization info
+structure                                   structures/sphere_N_12_R_1.vertex

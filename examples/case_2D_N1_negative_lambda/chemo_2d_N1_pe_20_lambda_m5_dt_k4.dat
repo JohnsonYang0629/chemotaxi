@@ -1,0 +1,33 @@
+# Job description
+job_name                    example_with_1_particle_negative_lambda
+job_type                    dynamic
+domain                      2D
+scheme                      history_local_compose_2d
+numerical_method            stochastic_first_order
+
+# Parameters specification
+radius                      1
+intrinsic_linear_velocity   1
+intrinsic_angular_velocity  1
+emission_rate               1
+translational_noise_gamma   500
+rotational_noise_gamma      500
+
+mobility_alpha              -5
+peclet_number               20
+
+initial_position_2D            0 0
+initial_orientation_2D_vector         1 0
+
+# Numerical simulation configuration
+droplet_num                 1
+n_steps                     20000
+dt                          0.0625
+
+# Output configuration
+output_name                 examples/case_2D_N1_high_Pe_lambda/chemo_2d_N1_pe_20_lambda_m5_dt_k4
+save_clones				    one_file
+initial_step                0
+
+# Discretization info
+structure                   structures/circle_R_1_N40.vertex

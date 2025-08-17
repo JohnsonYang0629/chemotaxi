@@ -1,0 +1,32 @@
+# Job description
+job_name                    performance_test_for_particle_number
+job_type                    dynamic
+domain                      2D
+scheme                      history_local_compose_2d
+numerical_method            forward_euler
+
+# Parameters specification
+radius                      1
+intrinsic_linear_velocity   1
+intrinsic_angular_velocity  1
+emission_rate               1
+
+mobility_alpha              4
+peclet_number               20
+
+initial_position_2D            0 0 2 0
+initial_orientation_2D_vector         1 0 1 0
+
+# Numerical simulation configuration
+droplet_num                 2
+n_steps                     10000
+dt                          0.0625
+
+# Output configuration
+output_name                 examples/case_2D_performance_test/chemo_2d_N2_performance_blob_20
+save_clones				    one_file
+initial_step                0
+
+# Discretization info
+structure                   structures/circle_R_1_N20.vertex
+structure                   structures/circle_R_1_N20.vertex
