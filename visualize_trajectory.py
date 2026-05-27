@@ -105,7 +105,7 @@ def plot_trajectories(trajectories, output_filename, dt=1.0, colormaps=None, cen
 
     num_particles = len(trajectories)
     first_pid = next(iter(trajectories))
-    is_3d = trajectories[first_pid].shape[1] >= 3
+    is_3d = trajectories[first_pid].shape[1] > 4
     num_steps = len(trajectories[first_pid])
     time_values = np.arange(num_steps) * dt
 
