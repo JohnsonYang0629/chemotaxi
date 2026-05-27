@@ -20,6 +20,7 @@ class ReadInput(object):
     self.options = {}
     number_of_structures = 0
     number_of_chem_dists = 0
+    number_of_mob_dists = 0
 
     # Read input file
     comment_symbols = ['#']   
@@ -40,6 +41,9 @@ class ReadInput(object):
           elif option == 'chemical_distribution':
             option += str(number_of_chem_dists)
             number_of_chem_dists += 1
+          elif option == 'mobility_distribution':
+            option += str(number_of_mob_dists)
+            number_of_mob_dists += 1
           self.options[option] = value
 
     # Set options to test or default values
@@ -82,19 +86,17 @@ class ReadInput(object):
     self.mobility_alphas = np.fromstring(self.options.get('mobility_alpha') or '1.0', sep=' ')
     self.peclet_numbers = np.fromstring(self.options.get('peclet_number') or '1.0', sep=' ')
 
+    self.particle_types = str.split(self.options.get('particle_type') or 'non_janus')
+
+    if len(self.particle_types) != self.droplet_num:
+      print(f"Warning: Number of particle_type values does not match droplet_num. Using first value for all.")
+      self.particle_types = [self.particle_types[0]] * self.droplet_num
     if len(self.mobility_alphas) != self.droplet_num:
       print(f"Warning: Number of mobility_alpha values does not match droplet_num. Using first value for all.")
       self.mobility_alphas = np.full(self.droplet_num, self.mobility_alphas[0])
     if len(self.peclet_numbers) != self.droplet_num:
       print(f"Warning: Number of peclet_number values does not match droplet_num. Using first value for all.")
       self.peclet_numbers = np.full(self.droplet_num, self.peclet_numbers[0])
-
-    if self.domain == "3D":
-      self.particle_types = str.split(self.options.get('particle_type') or 'non_janus')
-
-      if len(self.particle_types) != self.droplet_num:
-        print(f"Warning: Number of particle_type values does not match droplet_num. Using first value for all.")
-        self.particle_types = [self.particle_types[0]] * self.droplet_num
 
     if self.domain == "2D":
       # For 2D
@@ -110,7 +112,13 @@ class ReadInput(object):
       if len(initial_orient_2d_flat) != self.droplet_num * 2:
         sys.exit(
           f"Error: Mismatch between droplet_num ({self.droplet_num}) and number of initial_orientation_2D_vector coordinates.")
-      self.initial_orientations_2D = initial_orient_2d_flat.reshape((self.droplet_num, 2))
+
+      # Ensure the input 2D orientation is normalized to a unit vector [x, y]
+      orient_vectors_2d = initial_orient_2d_flat.reshape((self.droplet_num, 2))
+      norms = np.linalg.norm(orient_vectors_2d, axis=1, keepdims=True)
+      # Avoid division by zero for zero vectors
+      self.initial_orientations_2D = np.where(norms > 1e-9, orient_vectors_2d / norms, orient_vectors_2d)
+
     elif self.domain == "3D":
       # For 3D
       # Read the long string of 3D positions and reshape it into a (droplet_num, 3) array.
@@ -143,5 +151,9 @@ class ReadInput(object):
     self.chemical_distribution_files = []
     for i in range(number_of_chem_dists):
       self.chemical_distribution_files.append(str.split(str(self.options.get(f'chemical_distribution{i}')))[0])
+
+    self.mobility_distribution_files = []
+    for i in range(number_of_mob_dists):
+      self.mobility_distribution_files.append(str.split(str(self.options.get(f'mobility_distribution{i}')))[0])
 
     return

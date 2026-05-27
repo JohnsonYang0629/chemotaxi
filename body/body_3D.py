@@ -74,8 +74,7 @@ class Body3D(object):
     sigma_values = np.asarray(sigma_values, dtype=float).flatten()
     total_sigma = np.sum(sigma_values)
 
-    # 3. normalization
-    #    avoid divide by zero
+    # 3. normalization avoid divide by zero
     if total_sigma > 1e-12:
       self.sigma_distribution = sigma_values / total_sigma
     else:

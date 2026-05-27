@@ -23,6 +23,7 @@ class ChemoIntegrator2D(object):
 
         # Optional variables
         self.calc_surface_gradient_circle_numba_optimized = None
+        self.history_local_compose_2d_multi_body = None
         self.rotation_matrix_2d = None
 
     def advance_time_step(self, dt, *args, **kwargs):
@@ -38,6 +39,79 @@ class ChemoIntegrator2D(object):
             getattr(self, self.scheme)(body_to_update, dt, *args, **kwargs)
 
     def history_local_compose_2d(self, body_to_update, dt, *args, **kwargs):
+        """
+        Updates the state of a single 2D body.
+        """
+        step = kwargs.get('step')
+        force_grad = np.zeros(2)
+        torque_grad = 0.0
+
+        if not self.first_step:
+            force_grad, torque_grad = self.history_local_compose_2d_multi_body(
+                target_body=body_to_update,
+                all_bodies=self.bodies,
+                dt=dt,
+                step=step
+            )
+
+        # chem_prop = -(body_to_update.mobility_alpha / (2 * np.pi)) * force_grad
+        chem_prop = -(1.0 / (2 * np.pi)) * force_grad
+
+        if body_to_update.is_janus:
+            # Janus particle: turn off omega_0, compute torque induced by asymmetric chemical field
+            # mobility_rotational = body_to_update.mobility_alpha * 0.75
+            # chem_torque = -(mobility_rotational / (2 * np.pi)) * torque_grad
+            chem_torque = -(0.75 / (2 * np.pi)) * torque_grad
+            angular_velocity = self.intrinsic_velocity[1] + chem_torque
+            # In 2D, the orientation unit vector is exactly the v0_axis
+            intrinsic_swim_velocity = body_to_update.orientation * self.intrinsic_velocity[0]
+        else:
+            # Isotropic particle: keep intrinsic chirality omega_0
+            chem_torque = 0.0
+            angular_velocity = self.intrinsic_velocity[1] + chem_torque
+            intrinsic_swim_velocity = body_to_update.orientation * self.intrinsic_velocity[0]
+
+        linear_velocity_compose = intrinsic_swim_velocity + chem_prop
+
+        # --- Update vectors using 2D rotation matrix ---
+        if self.numerical_method == "adams_bashforth_2" and not self.first_step:
+            # Position update
+            location_new = body_to_update.location + (
+                        1.5 * linear_velocity_compose - 0.5 * body_to_update.velocities_previous_step[0:2]) * dt
+
+            # Angular velocity AB2 prediction
+            angular_velocity_ab2 = 1.5 * angular_velocity - 0.5 * body_to_update.velocities_previous_step[2]
+
+            # Vector rotation
+            rot_matrix = self.rotation_matrix_2d(angular_velocity_ab2 * dt)
+            orientation_new = np.dot(rot_matrix, body_to_update.orientation)
+        else:
+            # Default Forward Euler
+            location_new = body_to_update.location + linear_velocity_compose * dt
+
+            rot_matrix = self.rotation_matrix_2d(angular_velocity * dt)
+            orientation_new = np.dot(rot_matrix, body_to_update.orientation)
+
+        # Normalize to prevent vector length drift due to numerical rounding
+        orientation_new = orientation_new / np.linalg.norm(orientation_new)
+
+        # Update states
+        body_to_update.location = location_new
+        body_to_update.orientation = orientation_new
+
+        body_to_update.location_history[step + 1, :] = location_new
+        body_to_update.orientation_history[step + 1, :] = orientation_new
+
+        # Record prescribed velocity, in 2D it is [v_x, v_y, omega]
+        body_to_update.prescribed_velocity = np.array(
+            [linear_velocity_compose[0], linear_velocity_compose[1], angular_velocity])
+        body_to_update.chem_surface_gradient = force_grad
+        body_to_update.chem_torque_gradient = torque_grad
+        body_to_update.velocities_previous_step = body_to_update.prescribed_velocity
+
+        self.first_step = False
+
+    def history_local_compose_2d_nonjanus(self, body_to_update, dt, *args, **kwargs):
         """
         History part:
         [0, (N-1)dt]

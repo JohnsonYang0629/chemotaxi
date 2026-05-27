@@ -44,8 +44,8 @@ class ChemoIntegrator3D(object):
     def history_local_compose_3d(self, body_to_update, dt, *args, **kwargs):
         """
         Updates the state of a single 3D body (`body_to_update`) for one time step.
-        It calculates the chemical interactions from ALL bodies in the simulation
-        to determine the force and torque on this specific body.
+        It computes the chemical interactions from ALL bodies in the simulation
+        to determine the macroscopic chemotactic force and torque on this specific body.
         """
         while True:
             step = kwargs.get('step')
@@ -53,28 +53,50 @@ class ChemoIntegrator3D(object):
             torque_grad = np.zeros(3)
 
             # On the first step, we assume zero initial chemical gradient.
-            # For subsequent steps, we calculate the full multi-body interaction.
+            # For subsequent steps, we calculate the full multi-body interactions.
             if not self.first_step:
                 force_grad, torque_grad = self.history_local_compose_3d_multi_body(
                     target_body=body_to_update,
                     all_bodies=self.bodies,
                     dt=dt,
                     step=step
-                    )
+                )
 
-            # Calculate chemical and intrinsic velocity components
-            chem_prop = (body_to_update.mobility_alpha / (4 * np.pi)) * force_grad
-            chem_torque = (body_to_update.mobility_alpha / (4 * np.pi)) * torque_grad
+            # Calculate translational chemical propulsion (Fc)
+            chem_prop = -(body_to_update.mobility_alpha / (4 * np.pi)) * force_grad
 
-            intrinsic_swim_velocity = body_to_update.v0_axis * self.intrinsic_velocity[0]
+            # Determine rotational dynamics based on particle type
+            if body_to_update.is_janus:
+                # Janus particle: No intrinsic structural rotation (omega_0 = 0)
+                # Rotational mobility (\Lambda_r) is 3/4 of translational mobility (\Lambda) for a solid sphere
+                mobility_rotational = body_to_update.mobility_alpha * 0.75
+                chem_torque = -(mobility_rotational / (4 * np.pi)) * torque_grad
+
+                angular_velocity_vector = chem_torque
+                intrinsic_swim_velocity = body_to_update.v0_axis * self.intrinsic_velocity[0]
+            else:
+                # Isotropic droplet: Driven by intrinsic chirality, auto-chemotactic macroscopic torque is negligible
+                chem_torque = np.zeros(3)
+                angular_velocity_vector = self.intrinsic_velocity[1] * body_to_update.omega_axis + chem_torque
+                intrinsic_swim_velocity = body_to_update.v0_axis * self.intrinsic_velocity[0]
+
+            # Compose the final linear velocity
             linear_velocity_compose = intrinsic_swim_velocity + chem_prop
-
-            omega_axis = body_to_update.omega_axis
-            angular_velocity_vector = self.intrinsic_velocity[1] * omega_axis + chem_torque
 
             # --- Update position and orientation based on the chosen numerical method ---
 
-            if self.numerical_method == "stochastic_first_order":
+            if self.numerical_method == "adams_bashforth_2" and not self.first_step:
+                # Two-step Adams-Bashforth method (AB2)
+                # velocities_previous_step stores [vx, vy, vz, wx, wy, wz]
+                location_new = body_to_update.location + (
+                            1.5 * linear_velocity_compose - 0.5 * body_to_update.velocities_previous_step[0:3]) * dt
+
+                omega_axis_quaternion_dt = Quaternion.from_rotation(
+                    (1.5 * angular_velocity_vector - 0.5 * body_to_update.velocities_previous_step[3:6]) * dt)
+                body_to_update.omega_axis_orientation = omega_axis_quaternion_dt * body_to_update.omega_axis_orientation
+                body_to_update.location = location_new
+
+            elif self.numerical_method == "stochastic_first_order":
                 # Add stochastic terms for Brownian motion
                 random_rotation_vec = np.random.randn(3)
                 stochastic_rotation_term = np.sqrt(2 / self.gamma_r) * random_rotation_vec * np.sqrt(dt)
@@ -89,7 +111,8 @@ class ChemoIntegrator3D(object):
                 # Update translational position
                 body_to_update.location += linear_velocity_compose * dt + stochastic_translation_term
 
-            else:  # Default to Forward Euler if not stochastic
+            else:
+                # Default to Forward Euler method (also used for the first step of AB2 initialization)
                 rotation_increment = Quaternion.from_rotation(angular_velocity_vector * dt)
                 body_to_update.omega_axis_orientation = rotation_increment * body_to_update.omega_axis_orientation
                 body_to_update.location += linear_velocity_compose * dt
@@ -102,7 +125,7 @@ class ChemoIntegrator3D(object):
 
             # Store history for the next time step's calculations
             body_to_update.location_history[step + 1, :] = body_to_update.location
-            # Save orientation in [x, y, z, w] format, consistent with `body_3D.py`
+            # Save orientation in [x, y, z, w] format
             body_to_update.orientation = body_to_update.omega_axis_orientation.flip_self()
             body_to_update.orientation_history[step + 1, :] = body_to_update.orientation
 
@@ -112,7 +135,7 @@ class ChemoIntegrator3D(object):
             body_to_update.chem_torque_gradient = torque_grad
             body_to_update.velocities_previous_step = body_to_update.prescribed_velocity
 
-            # After the first step, this flag is set to False.
+            # Flag off first step after initialization
             self.first_step = False
             return
 

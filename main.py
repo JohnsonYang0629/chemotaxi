@@ -15,7 +15,7 @@ from body import body_2D
 from body import body_3D
 from integrator.integrator_2D import ChemoIntegrator2D
 from integrator.integrator_3D import ChemoIntegrator3D
-import chem_functions
+import chem_solver
 
 
 # Press the green button in the gutter to run the script.
@@ -88,6 +88,26 @@ if __name__ == '__main__':
             body.ID = i
             body.peclet_number = read.peclet_numbers[i]
             body.mobility_alpha = read.mobility_alphas[i]
+
+            particle_type = read.particle_types[i] if i < len(read.particle_types) else 'non_janus'
+            if particle_type == 'janus':
+                chem_dist_file = read.chemical_distribution_files[i] \
+                    if i < len(read.chemical_distribution_files) else 'None'
+                if chem_dist_file != 'None':
+                    sigma_values = read_chem_dist_file.read_chemical_distribution_file(chem_dist_file)
+                    body.set_sigma_distribution(sigma_values)
+                else:
+                    body.set_sigma_distribution(None)
+            else:
+                body.is_janus = False
+
+            mob_dist_file = read.mobility_distribution_files[i] if i < len(read.mobility_distribution_files) else 'None'
+            if mob_dist_file != 'None':
+                mob_values = read_chem_dist_file.read_chemical_distribution_file(mob_dist_file)
+                body.set_mobility_distribution(mob_values)
+            else:
+                body.set_mobility_distribution(None)
+
             bodies.append(body)
 
     elif domain == '3D':
@@ -113,6 +133,8 @@ if __name__ == '__main__':
                     body.set_sigma_distribution(sigma_values)
                 else:
                     body.set_sigma_distribution(None)
+            else:
+                body.is_janus = False
 
             bodies.append(body)
 
@@ -133,28 +155,12 @@ if __name__ == '__main__':
     integrator.gamma_t = read.gamma_t
 
     if domain == '2D':
-        integrator.rotation_matrix_2d = chem_functions.rotation_matrix_2d
-        integrator.calc_surface_gradient_circle_numba_optimized = partial(chem_functions.calc_surface_gradient_circle_numba_optimized,
-                                                                          dt=dt)
+        integrator.rotation_matrix_2d = chem_solver.rotation_matrix_2d
+        integrator.history_local_compose_2d_multi_body = partial(chem_solver.history_local_compose_2d_multi_body,
+                                                                 dt=dt)
     elif domain == '3D':
-        # For all cases in 3D (single/multi-body, janus/non_janus)
-        if read.droplet_num >= 1:
-            integrator.history_local_compose_3d_multi_body = partial(chem_functions.history_local_compose_3d_multi_body,
-                                                                     dt=dt)
-        elif read.particle_type == 'non_janus':
-            integrator.history_local_compose_3d_point = partial(chem_functions.history_local_compose_3d_point,
-                                                                structure_ref_config=structure_ref_config,
-                                                                dt=dt)
-        elif read.particle_type == 'janus':
-            integrator.history_local_compose_3d_distribution = partial(chem_functions.history_local_compose_3d_distribution,
-                                                                       structure_ref_config=structure_ref_config,
-                                                                       dt=dt)
-        elif read.particle_type == 'default':
-            integrator.calc_tangential_grad_3D = partial(chem_functions.calc_tangential_grad_3D,
-                                                         acceleration=read.acceleration,
-                                                         core=read.core,
-                                                         structure_ref_config=structure_ref_config,
-                                                         dt=dt)
+        integrator.history_local_compose_3d_multi_body = partial(chem_solver.history_local_compose_3d_multi_body,
+                                                                 dt=dt)
 
     # Loop over time steps
     start_time = time.time()
@@ -184,11 +190,17 @@ if __name__ == '__main__':
 
             if domain == '2D':
                 for body in integrator.bodies:
-                    loc_file.write('%s %s\n' % (body.location[0], body.location[1]))
+                    loc_file.write('%s %s %s %s\n' % (body.location[0],
+                                                      body.location[1],
+                                                      body.orientation[0],
+                                                      body.orientation[1]))
                     velocity_file.write('%s %s %s\n' % (body.prescribed_velocity[0],
                                                         body.prescribed_velocity[1],
                                                         body.prescribed_velocity[2]))
-                    chem_force_file.write('%s %s\n' % (body.chem_surface_gradient[0], body.chem_surface_gradient[1]))
+
+                    chem_force_file.write('%s %s %s\n' % (body.chem_surface_gradient[0],
+                                                          body.chem_surface_gradient[1],
+                                                          body.chem_torque_gradient))
 
             elif domain == '3D':
                 for body in integrator.bodies:
@@ -226,11 +238,16 @@ if __name__ == '__main__':
 
         if domain == '2D':
             for body in integrator.bodies:
-                loc_file.write('%s %s\n' % (body.location[0], body.location[1]))
+                loc_file.write('%s %s %s %s\n' % (body.location[0],
+                                                  body.location[1],
+                                                  body.orientation[0],
+                                                  body.orientation[1]))
                 velocity_file.write('%s %s %s\n' % (body.prescribed_velocity[0],
                                                     body.prescribed_velocity[1],
                                                     body.prescribed_velocity[2]))
-                chem_force_file.write('%s %s\n' % (body.chem_surface_gradient[0], body.chem_surface_gradient[1]))
+                chem_force_file.write('%s %s %s\n' % (body.chem_surface_gradient[0],
+                                                      body.chem_surface_gradient[1],
+                                                      body.chem_torque_gradient))
 
         elif domain == '3D':
             for body in integrator.bodies:
