@@ -55,13 +55,15 @@ class ChemoIntegrator2D(object):
             )
 
         # chem_prop = -(body_to_update.mobility_alpha / (2 * np.pi)) * force_grad
-        chem_prop = -(1.0 / (2 * np.pi)) * force_grad
+        # chem_prop = -(1.0 / (2 * np.pi)) * force_grad
+        chem_prop = -1.0 * force_grad
 
         if body_to_update.is_janus:
             # Janus particle: turn off omega_0, compute torque induced by asymmetric chemical field
             # mobility_rotational = body_to_update.mobility_alpha * 0.75
             # chem_torque = -(mobility_rotational / (2 * np.pi)) * torque_grad
-            chem_torque = -(0.75 / (2 * np.pi)) * torque_grad
+            # chem_torque = -(0.75 / (2 * np.pi)) * torque_grad
+            chem_torque = -0.75 * torque_grad
             angular_velocity = self.intrinsic_velocity[1] + chem_torque
             # In 2D, the orientation unit vector is exactly the v0_axis
             intrinsic_swim_velocity = body_to_update.orientation * self.intrinsic_velocity[0]

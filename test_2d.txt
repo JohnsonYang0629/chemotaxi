@@ -3,31 +3,27 @@ job_name                    test_2d
 job_type                    dynamic
 domain                      2D
 scheme                      history_local_compose_2d
-acceleration                numba
-core                        8
-numerical_method            stochastic_first_order
+numerical_method            forward_euler
 
 # Parameters specification
-mobility_alpha              4
 radius                      1
 intrinsic_linear_velocity   1
 intrinsic_angular_velocity  1
 emission_rate               1
-translational_noise_gamma   500
-rotational_noise_gamma      500
 
-peclet_number               40
+mobility_alpha              4
+peclet_number               20
 
 initial_position_2D            0 0
 initial_orientation_2D_vector         1 0
 
 # Numerical simulation configuration
 droplet_num                 1
-n_steps                     2000
-dt                          0.1
+n_steps                     6400
+dt                          0.015625
 
 # Output configuration
-output_name                 simulation_results/chemo_pe_40_lambda_4_noise_500
+output_name                 simulation_results/chemo_2d_N1_nonjanus_test_pe_20_lambda_4_dt_k6
 save_clones				    one_file
 initial_step                0
 

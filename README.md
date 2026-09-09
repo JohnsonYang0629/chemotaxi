@@ -29,14 +29,14 @@ vector_location_point_1
 For example, the file `structures/circle_R_1_N10.vertex` gives the
 structure of a 2D circular particle discretized by 10 points.
 
-We use a vector (2 numbers for 2D; 3 numbers for 3D) and a quaternion (4 numbers for 3D) to represent the
-location (2D and 3D) and orientation of each body (3D only, and knowledge for quaternion please see Ref. [1](http://dx.doi.org/10.1063/1.4932062) for details).
+We use a location vector (2 numbers, x and y positions, for 2D; 3 numbers, x, y and z positions for 3D).
+We use unit directional vector for 2D cases (2 numbers) and a quaternion for 3D (4 numbers) to represent the orientation of each body (3D using quaternion, and knowledge for quaternion please see Ref. [1](http://dx.doi.org/10.1063/1.4932062) for details).
 This information is saved by the code in the `*.clones` files,
-with format (2D):
+with 2D format:
 
 ```
-vector_location_body_0
-vector_location_body_1
+vector_location_body_0 unit_vector_body_0
+vector_location_body_1 unit_vector_body_1
 .
 .
 .
@@ -49,8 +49,9 @@ vector_location_body_1 quaternion_body_1
 .
 .
 ```
-Chemical substance distributions on the spherical droplet surface are given by the `*.chem_dist.dat` files. 
-Each line in these files represents the chemical substance emitting rate for the corresponding line in the `*.vertex` files
+Chemical substance distributions on the spherical droplet surface are given by the `*.chem_dist.dat` files (only for Janus cases). 
+Mobility coefficient distributions on the droplet surface are given by the `*.mob_dist.dat` files (only for Janus cases).
+Each line in these files represents the chemical substance emitting/absorbing rate or mobility coefficients for the corresponding line in the `*.vertex` files
 for node positions.
 ```
 1
@@ -78,41 +79,39 @@ job_name                    test_2d
 job_type                    dynamic
 domain                      2D
 scheme                      history_local_compose_2d
-acceleration                numba
-core                        8
-numerical_method            stochastic_first_order
+numerical_method            forward_euler
+particle_type               non_janus
 
 # Parameters specification
-mobility_alpha              4
 radius                      1
 intrinsic_linear_velocity   1
 intrinsic_angular_velocity  1
 emission_rate               1
-translational_noise_gamma   500
-rotational_noise_gamma      500
 
-peclet_number               40
+mobility_alpha              4
+peclet_number               20
 
 initial_position_2D                   0 0
 initial_orientation_2D_vector         1 0
 
 # Numerical simulation configuration
 droplet_num                 1
-n_steps                     2000
-dt                          0.1
+n_steps                     6400
+dt                          0.015625
 
 # Output configuration
-output_name                 simulation_results/chemo_pe_40_lambda_4_noise_500
-save_clones	            one_file
+output_name                 simulation_results/chemo_2d_N1_nonjanus_test_pe_20_lambda_4_dt_k6
+save_clones	                one_file
 initial_step                0
 
 # Discretization info
-structure                   structures/circle_R_1_N60.vertex```
+structure                   structures/circle_R_1_N60.vertex
 
----
 ```
 With this input we can run a simulation with one 2D droplet;
-see structures given to the options `structure`. To run the simulation use
+see structures given to the options `structure`. 
+
+To run the simulation use
 
 `
 python main.py --input-file test_2d.txt
@@ -120,29 +119,22 @@ python main.py --input-file test_2d.txt
 
 Now, you can inspect the outputs, `ls simulation_results/outputname.*`. The output files are:
 
-* `.config`: For each time step saved the code saves a file with the location 
-(and quaternion for 3D cases) of the droplet.
-
-* `.velocity.dat`: For each time step saved the code saves a file with the velocity of the droplet. 
-
+* `.config`: For each time step saved the code saves a file with the locations and orientations
+(unit directional vector for 2D cases and quaternions for 3D cases) of the droplets.
+* `.velocity.dat`: For each time step saved the code saves a file with the velocity of the droplet.
 * `.chemforce.dat`: For each time step saved the code saves a file with the chemical force 
-* (chemcial torque for 3D cases) applied to the droplet. 
-
+(chemcial torque for 3D cases) applied to the droplet.
 * `.inputfile`: a copy of the input file.
-
 * `.time`: the wall-clock time elapsed during the simulation (in seconds).
 * `.time.log`: the wall-clock time elapsed per 100 step (in seconds).
-* `.random_state`: the file with the state of the random generator from current simulation.
+* `.random_state`: the file with the state of the random generator from current simulation (can be reused for following simulations).
 
 **List of options for the input file:**
 * `domain` (string). Options: `2D` and `3D`. 
-* `scheme` (string). Option: `history_local_compose_2d` and `history_local_compose_3d`.
-* `particle_type` (string). Option for 3D: `non_janus` and `janus`, if multiple particles included, 
+* `scheme` (string). Options: `history_local_compose_2d` for 2D cases and `history_local_compose_3d` for 3D cases.
+* `particle_type` (string). Options: `non_janus` and `janus`, if multiple particles included, 
 may use `janus non_janus` to represent particles types in sequence.
-* `acceleration` (string). Options: `numba` and `parallel`. Numba acceleration is recommended for total step <= 10000;
-Parallel acceleration is recommended for EXTRA-long simulation and fine grid of the structure (or even 3D cases).
-* `core` (int (default 1)). Number of cores used for parallel processing. Only effective for the case `acceleration` used `parallel`.
-* `numerical_method` (string). Options: `forward_euler`， `adams_bashforth_2` and `stochastic_first_order`.
+* `numerical_method` (string). Options: `forward_euler` (recommend)， `adams_bashforth_2` and `stochastic_first_order` (for including Brownian motions).
 
 | Name | Solver type | Notes |
 | ---- | ----------- | ----- |
@@ -156,32 +148,33 @@ the magnitude of the chemical force.
 Support multi-particles by entering `mobility_alpha` number with spacings (e.g. `mobility_alpha  1 10`)
 * `radius` (float (default 1)): The geometric radius of the droplet. Normally we use non-dimensionlized parameter $R=1$.
 * `intrinsic_linear_velocity` (float (default 1)): The intrinsic linear velocity of the droplet. 
-Normally we use non-dimensionlized parameter $v_0=1$.
+Normally we use non-dimensionlized parameter $v_0=1$. For Janus cases, please set $v_0=0$.
 * `intrinsic_angular_velocity` (float (default 1)): The intrinsic angular velocity of the droplet.
-Normally we use non-dimensionlized parameter $\omega_0=1$.
+Normally we use non-dimensionlized parameter $\omega_0=1$. For Janus cases, please set $\omega_0=0$.
 * `emission_rate` (float (default 1)): The emission rate of the chemical substance. 
 Normally we use non-dimensionlized parameter $Q_0=1$.
-* `rotational_noise_gamma` (float (default 500)): 2D cases: dθ/dt = Ω₀ + √(2/Γ) * ξ(t); 3D cases: Δθ = Ω₀ * τ̂ * Δt + √(2/Γ) * ξ(t) * √(Δt).
-* `translational_noise_gamma` (float (default 500)): drₚ/dt = p̂ + F꜀ + √(2/Γₜ) * η(t).
-* `peclet_number`(float (default 1)): $Pe = Rv_o/D$, 
+* `rotational_noise_gamma` (float (default 500)): 2D cases: dθ/dt = Ω₀ + √(2/Γ) * ξ(t); 3D cases: Δθ = Ω₀ * τ̂ * Δt + √(2/Γ) * ξ(t) * √(Δt). Only validate for scheme `stochastic_first_order`.
+* `translational_noise_gamma` (float (default 500)): drₚ/dt = p̂ + F꜀ + √(2/Γₜ) * η(t). Only validate for scheme `stochastic_first_order`.
+* `peclet_number`(float (default 1)): $Pe = R \times v_0/D$, 
 is the ratio of self-propelling rate of the droplet to diffusion rate of emitted solute.
 Support multi-particles by entering `peclet_number` number with spacings (e.g. `peclet_number  1 10`)
 * `initial_position_2D`(float (vector default 0 0)) or `initial_position_3D`(float (vector default 0 0 0)): Vector format, 2D in format $(x_0, y_0)$, 3D in format $(x_0, y_0, z_0)$
 * `initial_orientation_2D_vector`(float (vector default 0 0 )) or `initial_orientation_3D_quaternion`(float (vector default 1 0 0 0 )): Vector format, 2D in format $(R\cos\theta, R\sin\theta)$; 3D use Quaternion format.
-* `droplet_num`(int (default 1)): This code now support multi-particle cases.
-* `n_steps`(int (default 1)): Number of simulation steps.
+* `droplet_num`(int (default 1)): This code support multi-particle cases.
+* `n_steps`(int (default 1)): Number of simulation total steps.
 * `dt`(float): time step length to advance the simulation.
 * `save_clones`(string (default `one_file`)) :options
 `_one_file_per_step_` and `one_file`. With the option
 `_one_file_per_step_` the clones configuration are saved in one file per time step. With the option
 `one_file` the code saves one file with the
-configurations of all the time steps.
+configurations of all the time steps (recommend).
 * `initial_step`(int (default 0)): Use this option to restart a simulation.
 If `initial_step > 0` the code will run from time step `initial_step` to
 `n_steps`. Also, the code will try to load `.config` files with the name
-(output_name + structure_name + initial_step + .config). (This restart function has NOT implemented yet).
+(output_name + structure_name + initial_step + .config). (This restart function has NOT been implemented yet).
 * `structure`(string): The file path under main directory and file name of the discretized surface points `.vertex` file.
 * `chemical_distribution`(string): The file path under main directory and file name of the chemical substance distribution `.chem_dist.dat` file.
+* `mobility_distribution`(string): The file path under main directory and file name of the mobility distribution `.mob_dist.dat` file. (If not loaded correctly, a uniform mobility coefficient distribution will be used)
 * `random_state` (string): name of a file with the state of the random generator from a previous simulation. It can be used to generate the same random numbers in different simulations.
 
 ## 4. Software organization
@@ -190,10 +183,10 @@ If `initial_step > 0` the code will run from time step `initial_step` to
 * **integrator/**: it has a small class to handle quaternions and
 the schemes to integrate the equations of motion.
 * **read_input/**: it has a small class to read and handle input information and vertex information.
-* **structures/**: it stores `.vertex` files.
+* **structures/**: it stores `.vertex`, `.chem_dist.dat` and `.mob_dist.dat` files.
 * **tools/**: start-up useful tools (NOT necessary).
 * **main.py**: it calls, processes and advances for simulations.
-* **chem_functions.py**: it calculates related chemical gradient forces (to be called).
+* **chem_solver.py**: it calculates related chemical gradient forces (to be called).
 
 ## 5. Notes
 * Control MKL's Threading: To run the simulation by forcing MKL to run in single-threaded mode, 

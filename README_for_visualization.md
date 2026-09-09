@@ -1,103 +1,164 @@
-# Chemical Concentration Field Visualization Tool
+# Visualization Tools for Chemotaxi Simulation
 
-This script, `visualize_concentration.py`, is a post-processing tool designed to work with the output of the chemotaxi simulation package. 
-It calculates and visualizes the chemical concentration field at a specific moment in time, based on the complete trajectory of the simulated particles.
-
-## Features
-
-- Reads simulation parameters directly from the `*.inputfile`, 
-including support for individual parameters (like Peclet numbers) for multiple particles.
-- Loads and parses the new multi-particle trajectory data (`*.config` file).
-- Supports both **2D** and **3D** simulation domains.
-    - **2D Mode**: Generates static heatmaps or full animations of the concentration evolution.
-    - **3D Mode**: Efficiently computes and renders two key 2D concentration slices, 
-visualizing them in context with the 3D trajectories, avoiding expensive calculations of the full 3D volume.
-- **Handles two types of 3D particles**:
-    1.  **`non-janus`**: A simple point particle source.
-    2.  **`janus`**: A spherical particle with a defined surface chemical distribution, accounting for both translation and rotation (via quaternions).
-- Uses `numba` for just-in-time parallel compilation to significantly accelerate calculations.
-- Flexible Command-Line Interface:
-  1. Supports using a file prefix for simplified input, automatically matching `.inputfile` and `.config` files.
-  2. Provides multiple 3D slice positioning modes, including auto-centering, targeting the end of a trajectory, or specifying exact coordinates manually.
-- Optionally saves the calculated concentration grid to a file. For 3D, it saves to a more efficient binary `.npy` format.
+These scripts act as post-processing tools designed to work with the output of the chemotaxi simulation package.
 
 ## Prerequisites
 
--   Python 3.x
--   Numpy
--   Matplotlib (`mplot3d` toolkit included)
--   Numba
--   The `read_input.py` module from the original package.
+- Python 3.x
+- Numpy
+- Matplotlib (`mplot3d` toolkit included)
+- Numba
+- Scipy (for `.mat` colormap loading)
+- The `read_input` and `read_vertex_file` modules from the original package.
 
-Install libraries: `pip install numpy matplotlib numba`
-
-## How to Use
-
-### For 2D Simulations (Static and Animated Outputs)
-#### Example 1: Generate a 2D Static Plot
-To create a static image of the concentration field for a 2D simulation at time `t=100.0`.
+Install required libraries:
+```bash
+pip install numpy matplotlib numba scipy
 ```
-python visualize_concentration.py \
-    --input-file simulation_results/chemo_2d_test.inputfile \
-    --trajectory-file simulation_results/chemo_2d_test.config \
+
+---
+
+## 1. Chemical Concentration Field Visualization
+
+The script: `visualize_concentration_allkind_acc_v6.py` calculates and visualizes the chemical concentration field at a specific moment in time (or as a continuous animation), based on the complete trajectory of the simulated particles.
+
+### Features
+
+- Reads simulation parameters directly from the `*.inputfile`, including support for individual parameters (like Peclet numbers) for multiple particles.
+- Loads and parses multi-particle trajectory data (`*.config` file).
+- Supports both **2D** and **3D** simulation domains:
+  - **2D Mode**: Generates static heatmaps or full animations of the concentration evolution. Supports overlaying gradient vector fields (`-∇C`) with quiver arrows.
+  - **3D Mode**: Efficiently computes and renders two key 2D concentration slices (YZ and XZ) alongside 3D trajectories, avoiding expensive full 3D volumetric calculations.
+- **Particle Models Supported**:
+  - **`non-janus`**: Point particle sources.
+  - **`janus`**: Spherical particles with defined surface chemical and mobility distributions, properly handling translational and rotational dynamics (via quaternions).
+  - Configurable 2D particle rendering: solid circle, chemical active regions, mobility regions, or both.
+- Accelerated with `numba` parallel JIT compilation (`@njit(parallel=True, fastmath=True)`).
+- Flexible CLI options: support for file prefixes, custom bounding ranges/centers, and various slice centering options in 3D.
+
+### How to Use
+
+#### For 2D Simulations (Static and Animated Outputs)
+
+**Example 1: Generate a 2D Static Plot using File Prefix & Gradient Overlay**
+```bash
+python visualize_concentration_allkind_acc_v6.py \
+    --file-prefix simulation_results/chemo_2d_test \
     --mode static \
     --time 100.0 \
+    --plot-gradient \
+    --visualize-particle all \
     --output-file static_2d_concentration
 ```
 This will generate `static_2d_concentration.png`.
 
-#### Example 2: Generate a 2D Animation (GIF format)
-To create a full animation for a 2D simulation, with each frame corresponding to `1.0` units of simulation time.
-```
-python visualize_concentration.py \
+**Example 2: Generate a 2D Animation (GIF format)**
+```bash
+python visualize_concentration_allkind_acc_v6.py \
     --input-file simulation_results/chemo_2d_test.inputfile \
     --trajectory-file simulation_results/chemo_2d_test.config \
     --mode animation \
     --frame-interval 1.0 \
     --writer gif \
+    --visualize-particle chem \
     --output-file animation_2d_chemo
 ```
 This will generate `animation_2d_chemo.gif`.
 
-### For 3D Simulations (Full 3D Visualization)
+#### For 3D Simulations (Cross-Section Slices)
 
-The primary update is for 3D visualization. The script no longer computes a 2D slice but a full 3D volume.
+1. **Ensure your `*.inputfile` is configured for Janus particles (if applicable):**
+   ```ini
+   domain = 3D
+   particle_type = janus
+   chemical_distribution_file = path/to/your/surface_sources.chem_dist.dat
+   ```
 
-**Important Note on Performance:** Full 3D calculations are computationally intensive. The number of points to calculate is `resolution³`. A resolution of 50 (default) means 125,000 points. A resolution of 100 means 1,000,000 points. **Be cautious when increasing the `--resolution` for 3D simulations.**
+2. **Ensure your `*.config` trajectory file contains 7 columns:** `x y z qw qx qy qz`.
 
-**Example for a 3D `janus` simulation:**
+3. **Run the script:**
+   ```bash
+   python visualize_concentration_allkind_acc_v6.py \
+       --input-file simulation_results/janus_3d.inputfile \
+       --trajectory-file simulation_results/janus_3d.config \
+       --time 100.0 \
+       --output-file concentration_3d_janus \
+       --resolution 100 \
+       --slice-center auto
+   ```
+   This generates a 3-panel plot containing YZ and XZ cross-sections alongside the 3D trajectory and slice planes.
 
-1.  **Ensure your `*.inputfile` is configured for a Janus particle:**
-    ```
-    domain = 3D
-    particle_type = janus
-    surface_distribution_file = path/to/your/surface_sources.chem_dist.dat
-    ```
+### Command-Line Arguments
 
-2.  **Ensure your `*.config` trajectory file has 7 columns:** `x y z qw qx qy qz`.
+- `--file-prefix` *(optional)*: Path and prefix for input files. If specified, `--input-file` and `--trajectory-file` are automatically matched.
+- `--input-file` *(optional)*: Path to the simulation input file (`*.inputfile`).
+- `--trajectory-file` *(optional)*: Path to the trajectory file (`*.config`).
+- `--output-file` *(optional)*: Base name of output file (without extension). Defaults to prefix or `concentration_field`.
+- `--mode` *(optional)*: Visualization mode: `static` or `animation`. Default: `static`.
+- `--time` *(required for static mode)*: Specific simulation time $t_1$ to visualize.
+- `--slice-center` *(optional for 3D)*: Method to center slices: `auto`, `end`, or explicit coordinates `x,y,z`. Default: `auto`.
+- `--frame-interval` *(optional for animation)*: Simulation time between frames. Default: `5.0`.
+- `--resolution` *(optional)*: Grid resolution along each axis. Default: `100`.
+- `--padding` *(optional)*: Padding distance around trajectories for grid boundaries. Default: `5.0`.
+- `--writer` *(optional for animation)*: Animation writer: `gif` (Pillow) or `ffmpeg` (MP4). Default: `gif`.
+- `--visualize-particle` *(optional)*: Visualize particles in 2D: `none`, `solid`, `chem`, `mobility`, or `all`. Default: `none`.
+- `--hide-markers` *(optional)*: Hide start/end trajectory markers in static mode.
+- `--center` *(optional)*: Center the 2D grid at `(X0, Y0)` keeping computed width/height.
+- `--range` *(optional)*: Explicitly set 2D domain range `XMIN XMAX YMIN YMAX` (overrides `--center`).
+- `--plot-gradient` *(optional)*: Overlay the concentration gradient field (`-∇C`) via quiver arrows.
+- `--quiver-density` *(optional)*: Sampling step size for quiver arrows. Default: `4`.
 
-3.  **Run the script:**
-    ```bash
-    python visualize_concentration.py \
-        --input-file simulation_results/janus_3d.inputfile \
-        --trajectory-file simulation_results/janus_3d.config \
-        --time 100.0 \
-        --output-file concentration_3d_janus.png \
-        --resolution 60 \
-        --save-dat
-    ```
-    -   This will create a 3D plot named `concentration_3d_janus.png`.
-    -   It will also save the raw 3D concentration data to `concentration_3d_janus.npy`. You can load this file later using `data = np.load('concentration_3d_janus.npy')`.
+---
 
-## Command-Line Arguments
+## 2. Trajectory Visualization ()
 
-- `--input-file` **(required)**: Path to the simulation input file (`*...inputfile`).
-- `--trajectory-file` **(required)**: Path to the trajectory file (`*...config`).
-- `--output-file` (optional): Filename for the saved plot (without extension). Default: `concentration_field.png`.
-- `--resolution` (optional): The number of points per axis for the grid. **Use with caution for 3D.** Default: `50`.
-- `--mode` (optional):The operating mode: `static` or `animation`. Default: `static`.
-- `--time` **(required for static mode)**: The simulation time `t1` for the snapshot. 
-- `frame-interval` (optional for animation): The amount of simulation time between each frame of the animation. Default: `5.0`.
-- `writer` (optional for animation): The writer to use for saving animations: gif or ffmpeg. Default: `gif`.
-- `--padding` (optional): Space to add around the trajectory bounds. Default: `5.0`.
-- `--save-dat` (optional for static): If specified, saves the concentration grid. For 3D, this creates a `.npy` file.
+The script:`visualize_trajectory_v2.py` visualizes 2D and 3D multi-particle trajectory curves from the block-formatted simulation output file.
+
+### Features
+
+- Handles multiple trajectories simultaneously for both **2D** and **3D** systems.
+- Trajectory coloration:
+  - **Time Gradient Mode**: Displays trajectory lines with smooth temporal color transitions and per-particle colorbars.
+  - **Solid Color Mode**: Plots distinct solid colors for each trajectory without colorbars.
+- Supports custom colormaps loaded from a MATLAB `.mat` file (`colormap.mat`), falling back to Matplotlib defaults (`viridis`, `plasma`, etc.).
+- Filter trajectories by time range (`--time_period t1 t2`).
+- Custom bounding box and aspect ratio controls via `--center` and `--range`.
+- Marks starting positions with **green** circles and current/ending positions with **red** circles.
+
+### How to Use
+
+**Example 1: Default Gradient Plot**
+```bash
+python visualize_trajectory_v2.py simulation_results/test_2d.config
+```
+
+**Example 2: Plot a Specific Time Range**
+```bash
+python visualize_trajectory_v2.py simulation_results/test_2d.config --time_period 10.0 50.0
+```
+
+**Example 3: Select Specific Colormaps from a `.mat` File**
+```bash
+python visualize_trajectory_v2.py simulation_results/test_2d.config --colormap_file colormap.mat --cmap_indices 1 3 5
+```
+
+**Example 4: Specify Manual Center and Bounding Box**
+```bash
+python visualize_trajectory_v2.py simulation_results/test_2d.config --center 0 0 5 --range 20 20 10
+```
+
+**Example 5: Solid Color Trajectory Plot**
+```bash
+python visualize_trajectory_v2.py simulation_results/test_2d.config --solid_color
+```
+
+### Command-Line Arguments
+
+- `trajectory_file` *(positional, required)*: Path to the trajectory file (`*.config`).
+- `--dt` *(optional)*: Simulation time step between consecutive data frames. Default: `1.0`.
+- `--colormap_file` *(optional)*: Path to `.mat` file containing custom colormaps. Default: `colormap.mat`.
+- `--cmap_indices` *(optional)*: Space-separated list of colormap indices to extract from the `.mat` file (e.g. `2 4 8`).
+- `--time_period` *(optional)*: Plot trajectory within time window `t1 t2`.
+- `--center` *(optional)*: Center coordinates of the plot box (`X0 Y0 Z0`). Must be paired with `--range`.
+- `--range` *(optional)*: Dimensions / total lengths of the plot box (`Lx Ly Lz`). Must be paired with `--center`.
+- `--solid_color` *(optional)*: Render trajectory lines in solid colors instead of temporal gradients.

@@ -224,7 +224,7 @@ def visualize_2d_mesh_from_files(output_prefix):
 
 if __name__ == "__main__":
     # ===== 配置参数 =====
-    N_2D = 40
+    N_2D = 200
     k_2D = N_2D / (2 * np.pi) * 1.5
     #prefix = "circle_R_1_N40_chiral_rotor"
 
@@ -262,20 +262,30 @@ if __name__ == "__main__":
     #    output_prefix=prefix
     #)
 
-    prefix = "circle_R_1_N40_slingshot_3_3"
+    prefix = "circle_R_1_N100_two_slice_theta_90"
 
     # 化学场 (Sigma)：头部释放，但左前强 (+1.0)，右前弱 (+0.6) -> 打破对称性
+    theta = 90/180*np.pi
     signed_regions_2d = [
-        (-np.pi / 2, 0.0, 4.0),  # 左前 1/4 圆
-        (0.0, np.pi / 2, 0.2)  # 右前 1/4 圆
+        (-theta, theta, 1.0),
+        (theta, np.pi - theta, 0.0),
+        (np.pi - theta, np.pi + theta, -1.0),
+        (np.pi + theta,  2*np.pi -np.pi + theta, 0.0)
     ]
-
+    signed_regions_2d = [
+        (-theta, theta, 0.0),
+        (theta, 2*np.pi - theta, 1.0)
+    ]
     # 物理场 (Alpha)：头部趋化 (-1.0，喜欢产物)，尾部避化 (保持默认 +1.5，讨厌产物)
     mobility_regions_2d = [
-        (-np.pi / 2, np.pi / 2, -4.0)  # 前半圆趋化
+        (-theta, theta, 0.0),
+        (theta, np.pi - theta, 2.0),
+        (np.pi - theta, np.pi + theta, 0.0),
+        (np.pi + theta, 2 * np.pi - np.pi + theta, 2.0)
     ]
-
+    mobility_regions_2d = [
+    ]
     generate_2d_mesh_signed(N_2D, signed_regions_2d, k_2D, output_prefix=prefix)
-    generate_2d_mobility_dist(N_2D, mobility_regions_2d, k_2D, default_alpha=6.0, output_prefix=prefix)
+    #generate_2d_mobility_dist(N_2D, mobility_regions_2d, k_2D, default_alpha=4.0, output_prefix=prefix)
     # 5. 自动可视化化学场
     visualize_2d_mesh_from_files(prefix)
